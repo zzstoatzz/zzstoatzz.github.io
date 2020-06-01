@@ -1,0 +1,11 @@
+<html>
+    <script language="javascript">
+    function RefreshImage(){
+    document.pic0.src="imgs/C minor.png?a=" + String(Math.random()*99999999);
+    setTimeout('RefreshImage()',50);
+    }
+    </script>
+    <body onload="RefreshImage()">
+    <img name="pic0" src="cap.png">
+    </body>
+</html>
