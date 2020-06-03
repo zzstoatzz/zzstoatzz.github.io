@@ -1,11 +1,332 @@
+<!DOCTYPE html>
 <html>
-    <script language="javascript">
-    function RefreshImage(){
-    document.pic0.src="imgs/C minor.png?a=" + String(Math.random()*99999999);
-    setTimeout('RefreshImage()',50);
-    }
-    </script>
-    <body onload="RefreshImage()">
-    <img name="pic0" src="cap.png">
+    <!--TITLE/HEAD-->
+    <title>Stoat World 2.0</title>
+    <head>
+        <link rel="shortcut icon" href="favicon.ico"type="image/x-icon">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+        <script src="js/helpers.js"></script>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="css/style.css">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+        <style>
+            h1,h2,h3,h4,h5,h6 {font-family: Georgia, serif}
+            body {font-family: Georgia, serif}
+        </style>
+    </head>
+    <!--END TITLE/HEAD-->
+
+    <!--BODY-->
+    <body style="background-image: url('imgs/background.png');z-index: -100;">
+        <!-- Navigation bar with social media icons -->
+        <div class="w3-bar w3-black w3-hide-big">
+            <a href="https://www.facebook.com/nathan.nowack.5/" class="w3-bar-item w3-button" target="_blank"><i class="fa fa-facebook-official"></i></a>
+            <a href="https://twitter.com/Nathan_Nowack" class="w3-bar-item w3-button" target="_blank"><i class="fa fa-twitter"></i></a>
+            <a href="https://www.instagram.com/nathannowack" class="w3-bar-item w3-button" target="_blank"><i class="fa fa-instagram"></i></a>
+            <a href="https://soundcloud.com/stoat-master" class="w3-bar-item w3-button" target="_blank"><i class="fa fa-soundcloud"></i></a>
+            <a href="https://github.com/zzstoatzz" class="w3-bar-item w3-button" target="_blank"><i class="fa fa-github"></i></a>
+            <a href="#" class="w3-bar-item w3-button w3-right"><i class="fa fa-search" target="_blank"></i></a>
+        </div>
+        
+        <!-- w3-content defines container for fixed size centered content, wrapped around all page content, except footer -->
+        <div class="w3-content" style="max-width:1600px;background-color:lightgray;">
+            <div class="s-welcomeAni">
+                <video autoplay loop muted playsinline title="welcome animation" style="height: 200px;z-index: -100;" src="wrap.mp4" alt="Created with home-baked Fourier analyzer">
+            </div>
+            <div class="w3-padding-left w3-white w3-border">
+                <!-- Header -->
+                <header class="w3-container w3-center w3-padding-32 w3-white">
+                    <h3 class="w3-xxlarge s-spin" id="welcome"><b>Stoat World 2.0</b></h3>
+                    <h6>Mood Reflector under construction. Please enjoy a diatonic guitar reference in the interim.</h6>
+                </header>
+
+                <!-- Image header -->
+                <header class="w3-display-container w3-white" id="home">
+                    <div style="width: 100%;">
+                        <img class="w3-image" id="board" src="imgs/keys/C major.png"/>
+                    </div>        
+                    <div class="w3-padding">
+                        <label for="key" font-size=150%>KEY:</label>
+                        <select id="mood" onchange="changeImg()"">
+                            <option value="major">Major</option>
+                            <option value="minor">Minor</option>
+                        </select>
+                        <select id="root" onchange="changeImg()"">
+                            <option value="Ab">Ab</option>
+                            <option value="A">A</option>
+                            <option value="Bb">Bb</option>
+                            <option value="B">B</option>
+                            <option value="C">C</option>
+                            <option value="Db">Db</option>
+                            <option value="D">D</option>
+                            <option value="Eb">Eb</option>
+                            <option value="E">E</option>
+                            <option value="F">F</option>
+                            <option value="Gb">Gb</option>
+                            <option value="G">G</option>
+                        </select>
+                    </div>
+                </header>
+            </div>
+            <!-- Grid -->
+            <div class="w3-row w3-border">
+
+                <!-- POSTS -->
+                <div class="w3-col l8 s12">
+                
+                <div style="box-shadow: 8px 8px 5px grey;" class="w3-container w3-white w3-margin w3-padding-large">
+                    <div class="w3-center">
+                    <h3>TITLE HEADING</h3>
+                    <h5>Title description, <span class="w3-opacity">May 2, 2016</span></h5>
+                    </div>
+
+                    <div class="w3-justify">
+                    <img src="/w3images/girl_hat.jpg" alt="Girl Hat" style="width:100%" class="w3-padding-16">
+                    <p><strong>More Hats!</strong> I am crazy about hats these days. Some text about this blog entry. Fashion fashion and mauris neque quam, fermentum ut nisl vitae, convallis maximus nisl. Sed mattis nunc id lorem euismod placerat. Vivamus porttitor
+                        magna enim, ac accumsan tortor cursus at. Phasellus sed ultricies mi non congue ullam corper. Praesent tincidunt sedtellus ut rutrum. Sed vitae justo condimentum, porta lectus vitae, ultricies congue gravida diam non fringilla.</p>
+                    <p>Sunt in culpa qui officia deserunt mollit anim id est laborum consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco.</p>
+                    <p class="w3-left"><button class="w3-button w3-white w3-border" onclick="likeFunction(this)"><b><i class="fa fa-thumbs-up"></i> Like</b></button></p>
+                    <p class="w3-right"><button class="w3-button w3-black" onclick="myFunction('demo1')" id="myBtn"><b>Replies  </b> <span class="w3-tag w3-white">1</span></button></p>
+                    <p class="w3-clear"></p>
+                    <div class="w3-row w3-margin-bottom" id="demo1" style="display:none">
+                        <hr>
+                        <div class="w3-col l2 m3">
+                            <img src="/w3images/avatar_smoke.jpg" style="width:90px;">
+                        </div>
+                        <div class="w3-col l10 m9">
+                            <h4>George <span class="w3-opacity w3-medium">May 3, 2015, 6:32 PM</span></h4>
+                            <p>Great blog post! Following</p>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+                <hr>
+
+                <div style="box-shadow: 8px 8px 5px grey;" class="w3-container w3-white w3-margin w3-padding-large">
+                    <div class="w3-center">
+                    <h3>TITLE HEADING</h3>
+                    <h5>Title description, <span class="w3-opacity">April 23, 2016</span></h5>
+                    </div>
+
+                    <div class="w3-justify">
+                    <img src="/w3images/man_hat.jpg" alt="Men in Hats" style="width:100%" class="w3-padding-16">
+                    <p><strong>Hats!</strong> The trend this summer is hats for men!</p>
+                    <p>Some text about this blog entry. Fashion fashion and mauris neque quam, fermentum ut nisl vitae, convallis maximus nisl. Sed mattis nunc id lorem euismod placerat. Vivamus porttitor magna enim, ac accumsan tortor cursus at. Phasellus sed ultricies
+                        mi non congue ullam corper. Praesent tincidunt sedtellus ut rutrum. Sed vitae justo condimentum, porta lectus vitae, ultricies congue gravida diam non fringilla.</p>
+                    <p class="w3-left"><button class="w3-button w3-white w3-border" onclick="likeFunction(this)"><b><i class="fa fa-thumbs-up"></i> Like</b></button></p>
+                    <p class="w3-right"><button class="w3-button w3-black" onclick="myFunction('demo2')"><b>Replies  </b> <span class="w3-tag w3-white">2</span></button></p>
+                    <p class="w3-clear"></p>
+                    
+                    <!-- Example of comment field -->
+                    <div id="demo2" style="display:none">
+                        <div class="w3-row">
+                        <hr>
+                        <div class="w3-col l2 m3">
+                            <img src="/w3images/girl_train.jpg" style="width:90px;">
+                        </div>
+                        <div class="w3-col l10 m9">
+                            <h4>Amber <span class="w3-opacity w3-medium">April 26, 2015, 10:52 PM</span></h4>
+                            <p>Love your blog page! Simply the best! Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p><br>
+                        </div>
+                        </div>
+                        <div class="w3-row w3-margin-bottom">
+                        <div class="w3-col l2 m3">
+                            <img src="/w3images/girl.jpg" style="width:90px;">
+                        </div>
+                        <div class="w3-col l10 m9">
+                            <h4>Angie <span class="w3-opacity w3-medium">April 23, 2015, 9:12 PM</span></h4>
+                            <p>Love hats!!</p>
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+
+                <div style="box-shadow: 8px 8px 5px grey;" class="w3-container w3-white w3-margin w3-padding-large">
+                    <div class="w3-center">
+                    <h3>TITLE HEADING</h3>
+                    <h5>Title description, <span class="w3-opacity">April 7, 2016</span></h5>
+                    </div>
+
+                    <div class="w3-justify">
+                    <img src="/w3images/runway.jpg" alt="Runway" style="width:100%" class="w3-padding-16">
+                    <p><strong>Dont miss!</strong> The runway in New York City this weekend is gonna be legendary!</p>
+                    <p>Some text about this blog entry. Fashion fashion and mauris neque quam, fermentum ut nisl vitae, convallis maximus nisl. Sed mattis nunc id lorem euismod placerat. Vivamus porttitor magna enim, ac accumsan tortor cursus at. Phasellus sed ultricies
+                        mi non congue ullam corper. Praesent tincidunt sedtellus ut rutrum. Sed vitae justo condimentum, porta lectus vitae, ultricies congue gravida diam non fringilla.</p>
+                    <p class="w3-left"><button class="w3-button w3-white w3-border" onclick="likeFunction(this)"><b><i class="fa fa-thumbs-up"></i> Like</b></button></p>
+                    <p class="w3-right"><button class="w3-button w3-black" onclick="myFunction('demo3')"><b>Replies  </b> <span class="w3-tag w3-white">3</span></button></p>
+                    <p class="w3-clear"></p>
+                    
+                    <!-- Example of comment field -->
+                    <div id="demo3" style="display:none">
+                        <hr>
+                        <div class="w3-row w3-margin-bottom">
+                        <div class="w3-col l2 m3">
+                            <img src="/w3images/girl_mountain.jpg" style="width:90px;">
+                        </div>
+                        <div class="w3-col l10 m9">
+                            <h4>Jane <span class="w3-opacity w3-medium">April 10, 2015, 7:22 PM</span></h4>
+                            <p>That was a great runway show! Thanks for everything.</p>
+                        </div>
+                        </div>
+                        <div class="w3-row w3-margin-bottom">
+                        <div class="w3-col l2 m3">
+                            <img src="/w3images/boy.jpg" style="width:90px;">
+                        </div>
+                        <div class="w3-col l10 m9">
+                            <h4>John <span class="w3-opacity w3-medium">April 8, 2015, 10:32 PM</span></h4>
+                            <p>Keep up the GREAT work! I am cheering for you!! Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt.</p>
+                        </div>
+                        </div>
+                        <div class="w3-row w3-margin-bottom">
+                        <div class="w3-col l2 m3">
+                            <img src="/w3images/girl_hood.jpg" style="width:90px;">
+                        </div>
+                        <div class="w3-col l10 m9">
+                            <h4>Anja <span class="w3-opacity w3-medium">April 7, 2015, 9:12 PM</span></h4>
+                            <p>Cant wait for the runway to start!</p>
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+                
+                <!-- END POSTS -->
+                </div>
+
+                <!-- About/Information menu -->
+                <div class="w3-col l4">
+                <!-- About Card -->
+                <div style="box-shadow: 8px 8px 5px grey;" class="w3-white w3-margin">
+                    <img src="imgs/meNO.jpg" alt="Nathan" style="width:100%">
+                    <div class="w3-container w3-black">
+                    <h4>Nathan Nowack</h4>
+                    <p style="text-align: justify;"> I am recent chemical engineering graduate of the Univeristy of Michigan - Ann Arbor. I am an amateur data scientist, guitar player and music producer with aspirations to escape each amateur realm.</p>
+                    <p style="text-align: justify;"> You can check out some of my programming interests by checking out my <a href="https://github.com/zzstoatzz/portfolio/blob/master/README.md">GitHub portfolio</a>, some of my guitar playing on <a href="https://www.instagram.com/stoatguitar/">my IG</a> and some of my songs by going to <a href="https://soundcloud.com/stoat-master">my SoundCloud page</a>. </p>
+                    </div>
+                </div>
+                <hr>
+
+                <!-- News of Interest -->
+                <div style="box-shadow: 8px 8px 5px grey;" class="w3-white w3-margin">
+                    <div class="w3-container w3-padding w3-black">
+                    <h4>Recent News of Interest</h4>
+                    </div>
+                    <ul class="w3-ul w3-hoverable w3-white">
+                    <li class="w3-padding-16">
+                        <img src="/w3images/avatar_smoke.jpg" alt="Image" class="w3-left w3-margin-right" style="width:50px">
+                        <span class="w3-large">Denim</span>
+                        <br>
+                        <span>Sed mattis nunc</span>
+                    </li>
+                    <li class="w3-padding-16">
+                        <img src="/w3images/bandmember.jpg" alt="Image" class="w3-left w3-margin-right" style="width:50px">
+                        <span class="w3-large">Sweaters</span>
+                        <br>
+                        <span>Praes tinci sed</span>
+                    </li>
+                    <li class="w3-padding-16">
+                        <img src="/w3images/workshop.jpg" alt="Image" class="w3-left w3-margin-right" style="width:50px">
+                        <span class="w3-large">Workshop</span>
+                        <br>
+                        <span>Ultricies congue</span>
+                    </li>
+                    <li class="w3-padding-16">
+                        <img src="/w3images/avatar_smoke.jpg" alt="Image" class="w3-left w3-margin-right w3-sepia" style="width:50px">
+                        <span class="w3-large">Trends</span>
+                        <br>
+                        <span>Lorem ipsum dipsum</span>
+                    </li>
+                    </ul>
+                </div>
+                <hr>
+
+                <!-- Shoutout -->
+                <div style="box-shadow: 8px 8px 5px grey;" class="w3-white w3-margin">
+                    <div class="w3-container w3-padding w3-black">
+                    <h4 id="month"></h4>
+                    </div>
+                    <div class="w3-container w3-white">
+                    <div class="w3-container w3-display-container w3-light-grey w3-section" style="height:200px">
+                        <span class="w3-display-middle">Your AD Here</span>
+                    </div>
+                    </div>
+                </div>
+                <hr>
+
+                <!-- Tags -->
+                <div style="box-shadow: 8px 8px 5px grey;" class="w3-white w3-margin">
+                    <div class="w3-container w3-padding w3-black">
+                    <h4>Tags</h4>
+                    </div>
+                    <div class="w3-container w3-white">
+                    <p>
+                        <span class="w3-tag w3-light-grey w3-small w3-margin-bottom">Python</span> <span class="w3-tag w3-light-grey w3-small w3-margin-bottom">Travel</span> <span class="w3-tag w3-light-grey w3-small w3-margin-bottom">Mood Generator</span>
+                        <span class="w3-tag w3-light-grey w3-small w3-margin-bottom">Politics</span> <span class="w3-tag w3-light-grey w3-small w3-margin-bottom">Data Science</span> <span class="w3-tag w3-light-grey w3-small w3-margin-bottom">TV Shows</span>
+                        <span class="w3-tag w3-light-grey w3-small w3-margin-bottom">Ideas</span> <span class="w3-tag w3-light-grey w3-small w3-margin-bottom">Percolation</span> <span class="w3-tag w3-light-grey w3-small w3-margin-bottom">Philosophy</span>
+                        <span class="w3-tag w3-light-grey w3-small w3-margin-bottom">Guitar</span> <span class="w3-tag w3-light-grey w3-small w3-margin-bottom">Ableton</span> <span class="w3-tag w3-light-grey w3-small w3-margin-bottom">Rant</span>
+                        <span class="w3-tag w3-light-grey w3-small w3-margin-bottom">Music</span> <span class="w3-tag w3-light-grey w3-small w3-margin-bottom">Web Development</span>
+                    </p>
+                    </div>
+                </div>
+                <hr>
+
+                <!-- Inspiration -->
+                <div style="box-shadow: 8px 8px 5px grey;" class="w3-white w3-margin">
+                    <div class="w3-container w3-padding w3-black">
+                    <h4>Inspiration</h4>
+                    </div>
+                    <div class="w3-row-padding w3-white">
+                    <div class="w3-col s6">
+                        <p><a href="https://www.instagram.com/p/CAbSLXRByiP/"><img src="imgs/inspiration/nickhames.png" alt="1" style="width:100%;"></a></p>
+                        <p><a href="https://www.youtube.com/watch?v=qbW6FRbaSl0"><img src="imgs/inspiration/kalle.png" alt="2" style="width:100%"></a></p>
+                    </div>
+                    <div class="w3-col s6">
+                        <p><a href="https://che.engin.umich.edu/people/robert-ziff/"><img src="imgs/inspiration/ziff.jpg" alt="3" style="width:100%"></a></p>
+                        <p><a href="https://youtu.be/spUNpyF58BY"><img src="imgs/inspiration/3b1b.png" alt="1" style="width:100%"></a></p>
+                    </div>
+                    </div>
+                </div>
+                <hr>
+
+
+                <hr>
+
+                <!-- END About/Intro Menu -->
+                </div>
+
+            <!-- END GRID -->
+            </div>
+
+        <!-- END w3-content -->
+        </div>
+
+        <!--FOOTER-->
+        <footer class="w3-container w3-dark-grey" style="padding:32px">
+            <a href="#" class="w3-button w3-black w3-padding-large w3-margin-bottom"><i class="fa fa-arrow-up w3-margin-right"></i>To the top</a>
+            <p>Stoat World 2.0</p>
+        </footer>
+        <!--END FOOTER-->
+
+        <script>
+        // Toggle between hiding and showing blog replies/comments
+        document.getElementById("myBtn").click();
+        function myFunction(id) {
+        var x = document.getElementById(id);
+        if (x.className.indexOf("w3-show") == -1) {
+            x.className += " w3-show";
+        } else { 
+            x.className = x.className.replace(" w3-show", "");
+        }
+        }
+
+        function likeFunction(x) {
+        x.style.fontWeight = "bold";
+        x.innerHTML = "✓ Liked";
+        }
+        </script>
+
     </body>
+    <!--END BODY-->
 </html>
