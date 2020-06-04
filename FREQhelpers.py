@@ -13,7 +13,7 @@ mpl.rcParams['axes.grid'] = False
 SizeLim = 25e6
 mpl.rcParams['animation.embed_limit'] = SizeLim
 
-def createDash(args):
+def createDash(args, plts='all'):
     # derive anim characteristics from inputs
     duration, resolution, T, freqs, signal = args
     steps = int(maxSteps(SizeLim)*resolution)
@@ -25,33 +25,21 @@ def createDash(args):
     interval = duration*1e3/steps
 
     # setup mpl fig
-    objs = setupS(f_0, f_f, T, signal, freqs)
-    fig = objs[0]
+    if plts=='all':
+        objs = setupS(f_0, f_f, T, signal, freqs)
+        fig, ax = objs[0], objs[1:]
+        args = (t, f, ax, signal, freqs, t_est)
+
+    elif plts=='wrap':
+        objs = setupW(f_0, f_f, T, freqs)
+        fig, ax = objs[0], objs[1]
+        c = plt.cm.jet(np.linspace(0, T, steps))
+        args = (t, f, ax, freqs, t_est, c)
+        t_est = t_est/5
 
     # pack args and call animator
-    args = (t, f, objs[1:], signal, freqs, t_est)
     anim = animation.FuncAnimation(fig, spectrum, frames=steps, fargs=args, interval=interval, blit=True)
     return anim
-
-def maxSteps(L):
-    a, b, c = 1.55979065e-11, -1.45174657e-04,  3.25730323e+02
-    s = a*L**2+b*L + c
-    return s
-
-def t_required(s):
-    a, b, c = 6.77857223e-06, 1.12168328e-01, 1.40973076e+00
-    t = a*s**2+b*s+c
-    return t
-
-def progress(i, t, estimate, steps=20):
-    x = int((i / len(t))*steps)
-    bar = ['#']*x + ['-']*(steps-x)
-    bar[-1] = '#' if i == len(t)-1 else '-'
-    print('Creating animation with '+ str(len(t)) +' frames\n', *bar, end=' ')
-    msg = str(int((i+1)/len(t)*100))+'% complete'
-    remaining = datetime.timedelta(seconds = int(estimate*(1-i/len(t))))
-    msg += '\n time remaining = '+str(remaining)
-    print(msg, end='')
 
 def setup(f,f_wrap, fig, flip=False ):        
     ax1 = plt.subplot2grid((6, 9), (0, 1), rowspan=2, colspan=8)
@@ -79,29 +67,6 @@ def setup(f,f_wrap, fig, flip=False ):
     fig.show(False)
     return (fig, cart, polar, moment,)
 
-# wrap single frequency
-def wrap(i, t, y, omega, cart, polar, moment, flip=False, ss=False):
-    showProgress(i, t)
-    clear_output(wait=True)
-    cart.set_data([], [])
-    polar.set_data([], [])
-    #r, theta = np.sqrt(t**2 + y**2), np.arctan(y/t) -- weird fractal
-    m = 1 + int(len(t)/8*(np.sin(i*np.pi/(len(t)/2)))**2)
-    if flip:
-        j = t[i-m:i+m+1] if i <= len(t)/2 else (2*np.pi-t)[i-m:i+m+1]
-        k = y[i-m:i+m+1] if i <= len(t)/2 else y[i-m:i+m+1]
-    elif ss:
-        #j, k = t[:i+1], y[i:i+1] weird plane oscillation
-        j, k = t[:i+1], y[:i+1]
-    else:
-        j, k = t[i-m:i+m+1], y[i-m:i+m+1]
-    M = [np.mean(k[:p+1]) for p in range(len(k))]
-    cart.set_data(j, k)
-    polar.set_data(omega*j, k)
-    moment.set_data(j, M)
-    return (cart, polar,moment,)
-
-# identify frequency in mixed signal
 def setupS(f_0, f_f, T, signal, freqs):
     fig = plt.figure(figsize=(6, 4),dpi=400);
     ax1 = plt.subplot2grid((7, 9), (0, 0), rowspan=2, colspan=7)
@@ -146,9 +111,40 @@ def setupS(f_0, f_f, T, signal, freqs):
 
     return (fig, cart, polar, loc, moment, f_s, f_w,)
 
-def spectrum(i, t, f, axes, signal, freqs, filter=1.1, A=2):
+def setupW(f_0, f_f, T, freqs):
+    fig, ax = plt.subplots(figsize=(4, 4), dpi=300, subplot_kw=dict(polar=True))
+    ax.spines['polar'].set_visible(False)
+    ax.set_xticks([]), ax.set_yticks([])
+    plot = ax.plot([], [], 'g', lw=1)
+
+    return (fig, plot,)
+
+# plot for wrapping single frequency
+def single(i, t, y, omega, cart, polar, moment, flip=False, ss=False):
+    progress(i, t)
+    clear_output(wait=True)
+    cart.set_data([], [])
+    polar.set_data([], [])
+    #r, theta = np.sqrt(t**2 + y**2), np.arctan(y/t) -- weird fractal
+    m = 1 + int(len(t)/8*(np.sin(i*np.pi/(len(t)/2)))**2)
+    if flip:
+        j = t[i-m:i+m+1] if i <= len(t)/2 else (2*np.pi-t)[i-m:i+m+1]
+        k = y[i-m:i+m+1] if i <= len(t)/2 else y[i-m:i+m+1]
+    elif ss:
+        #j, k = t[:i+1], y[i:i+1] weird plane oscillation
+        j, k = t[:i+1], y[:i+1]
+    else:
+        j, k = t[i-m:i+m+1], y[i-m:i+m+1]
+    M = [np.mean(k[:p+1]) for p in range(len(k))]
+    cart.set_data(j, k)
+    polar.set_data(omega*j, k)
+    moment.set_data(j, M)
+    return (cart, polar,moment,)
+
+# plot for isolating frequencies
+def spectrum(i, t, f, axes, signal, freqs, t_est, filter=1.1, A=2):
     cart, polar, loc, moment, f_s, f_w = axes
-    progress(i, t, 100)
+    progress(i, t, t_est)
     clear_output(wait=True)
     f_i = f[i]
 
@@ -166,6 +162,20 @@ def spectrum(i, t, f, axes, signal, freqs, filter=1.1, A=2):
     moment.set_data(f[:i+1], M)
     return (cart, polar, loc, moment, f_s, f_w,)
 
+def wrap(i, t, f, plot, freqs, t_est, c):
+    ax = plot[0]
+    progress(i, t, t_est)
+    clear_output(wait=True)
+    f_i = f[i]
+    omega = 2*np.pi*f_i
+    x = t if i < len(t)/2 else -1*t
+    c = waveform(freqs,x)
+    #tail = 5
+    #ax.set_prop_cycle(c[i] for i in c)
+    ax.set_data(omega*x, c)
+    plot[0] = ax
+    return plot
+
 def center(r, f_, t):#a, f_, t):
     omega = 2*np.pi*f_
     theta = omega*t
@@ -178,3 +188,23 @@ def waveform(freqs, t):
         wave += np.sin(2*np.pi*freq*t)
     signal = 0.5*(1 + wave/len(freqs))
     return signal
+
+def maxSteps(L):
+    a, b, c = 1.55979065e-11, -1.45174657e-04,  3.25730323e+02
+    s = a*L**2+b*L + c
+    return s
+
+def t_required(s):
+    a, b, c = 6.77857223e-06, 1.12168328e-01, 1.40973076e+00
+    t = a*s**2+b*s+c
+    return t
+
+def progress(i, t, estimate, steps=20):
+    x = int((i / len(t))*steps)
+    bar = ['#']*x + ['-']*(steps-x)
+    bar[-1] = '#' if i == len(t)-1 else '-'
+    print('Creating animation with '+ str(len(t)) +' frames\n', *bar, end=' ')
+    msg = str(int((i+1)/len(t)*100))+'% complete'
+    remaining = datetime.timedelta(seconds = int(estimate*(1-i/len(t))))
+    msg += '\n time remaining = '+str(remaining)
+    print(msg, end='')

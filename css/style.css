@@ -233,6 +233,6 @@ hr{border:0;border-top:1px solid #eee;margin:20px 0}
 
 /* Custom */
 .s-spin{animation:w3-spin 1s 1 linear}
-.s-welcomeAni{position: absolute; top: 6%;right: -7%;z-index: 100;width: 30%;}
+.s-welcomeAni{position: absolute; top: 7.6%;right: -13%;z-index: 100;width: 30%;}
 
 .s-background{background: url("imgs/background.png");background-repeat: repeat;}
