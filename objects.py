@@ -52,7 +52,6 @@ class Note():
         self.stringName, self.stringHeight, self.fretNum = sN, sH, fN
         self.FREQ = round(obj.baseNotes[self.stringName]['f (Hz)'] * 2**(self.fretNum/12), 3)
         self.name, self.genName = h.ID_note(self.FREQ)
-        self.board = obj
     def __str__(self):
         summary = self.name+" note on fret "+str(self.fretNum) +" of the open "+self.stringName+ " ("+ str(self.stringHeight)+") string"
         return summary
