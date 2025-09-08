@@ -4,6 +4,12 @@ import LinkCard from '@/app/components/LinkCard';
 
 const links = [
     {
+        title: "status",
+        description: "live status: availability, activity, vibes",
+        link: "https://status.zzstoatzz.io",
+        source: "status",
+    },
+    {
         title: "marvin",
         description: "Structured LLM outputs with native and pydantic types.",
         link: "https://github.com/prefecthq/marvin",
