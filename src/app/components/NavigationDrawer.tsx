@@ -141,9 +141,14 @@ export default function NavigationDrawer() {
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="block text-sm font-light text-cyan-300 hover:text-cyan-200 transition-colors"
+                                            aria-label="Current status"
                                         >
-                                            {statusEmoji && <span aria-hidden className="mr-1">{statusEmoji}</span>}
-                                            {statusText}
+                                            <span className="mr-1 text-cyan-400/80">status:</span>
+                                            {/* Hide custom emojis; show only standard emoji */}
+                                            {statusEmoji && !statusEmoji.startsWith('custom:') && (
+                                                <span aria-hidden className="mr-1">{statusEmoji}</span>
+                                            )}
+                                            <span>{statusText}</span>
                                         </a>
                                     </li>
                                 )}
