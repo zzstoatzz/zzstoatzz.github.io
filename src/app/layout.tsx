@@ -9,6 +9,7 @@ import { BackgroundProvider } from './contexts/BackgroundContext';
 import BackgroundSwitcher from './components/BackgroundSwitcher';
 import Background from './components/Background';
 import NavigationDrawer from './components/NavigationDrawer';
+import StatusIndicator from './components/StatusIndicator';
 
 const firaCode = Fira_Code({
     subsets: ['latin'],
@@ -50,6 +51,7 @@ export default function RootLayout({
                     <div className="relative z-20 min-h-screen flex flex-col overflow-x-hidden">
                         <BackgroundSwitcher />
                         <NavigationDrawer />
+                        <StatusIndicator />
                         <ConditionalLayout>
                             {children}
                         </ConditionalLayout>
