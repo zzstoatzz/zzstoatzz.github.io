@@ -8,7 +8,7 @@ import SoundCloudPlayer from './components/SoundCloudPlayer';
 import { BackgroundProvider } from './contexts/BackgroundContext';
 import BackgroundSwitcher from './components/BackgroundSwitcher';
 import Background from './components/Background';
-import NavigationDrawer from './components/NavigationDrawer';
+import NavigationMenu from './components/NavigationMenu';
 
 const firaCode = Fira_Code({
     subsets: ['latin'],
@@ -49,7 +49,7 @@ export default function RootLayout({
                     <Background />
                     <div className="relative z-20 min-h-screen flex flex-col overflow-x-hidden">
                         <BackgroundSwitcher />
-                        <NavigationDrawer />
+                        <NavigationMenu />
                         <ConditionalLayout>
                             {children}
                         </ConditionalLayout>
