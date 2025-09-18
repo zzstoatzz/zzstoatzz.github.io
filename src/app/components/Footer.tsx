@@ -47,7 +47,7 @@ export default function Footer() {
     ];
 
     return (
-        <footer className="py-6 relative z-50">
+        <footer className="py-6 mt-auto relative z-50">
             <div className="container mx-auto flex flex-col items-center px-4">
                 <div className="flex space-x-6 mb-4">
                     {socialLinks.map((link) => (

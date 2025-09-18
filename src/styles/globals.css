@@ -365,6 +365,7 @@
     backdrop-filter: blur(3px);
     /* Adjust the pixel value for more or less blur */
     padding: 10px;
+    padding-bottom: 100px; /* Space for footer */
     border-radius: 10px;
     position: fixed;
     top: 0;
