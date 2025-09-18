@@ -72,7 +72,7 @@ export default function Footer() {
                 <p className="text-xs text-gray-500 mb-2">&copy; {new Date().getFullYear()} zzstoatzz</p>
                 
                 <a 
-                    href="https://github.com/zzstoatzz/zzstoatzz.io"
+                    href="https://github.com/zzstoatzz/zzstoatzz.github.io"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-xs text-gray-500 hover:text-cyan-400 transition-colors duration-300"
