@@ -167,7 +167,7 @@ export default function NavigationMenu() {
                         <div className="flex items-center justify-between px-4 py-3 border-b border-cyan-900/20">
                             <h2 className="text-cyan-300 text-sm font-light">navigation</h2>
                             <div className="flex items-center gap-2">
-                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                <div className="hidden sm:flex items-center gap-1 text-xs text-gray-500">
                                     <kbd className="px-1.5 py-0.5 bg-gray-800 border border-gray-700 rounded text-xs">⌘K</kbd>
                                 </div>
                                 <button
@@ -203,12 +203,12 @@ export default function NavigationMenu() {
                                                 {pathname === item.href && <span className="text-xs">*</span>}
                                             </div>
                                             {item.description && (
-                                                <div className="text-sm text-gray-400 mt-0.5">
+                                                <div className="text-sm text-gray-400 mt-0.5 hidden sm:block">
                                                     {item.description}
                                                 </div>
                                             )}
                                         </div>
-                                        <div className="text-xs text-gray-500">
+                                        <div className="hidden sm:block text-xs text-gray-500">
                                             {index === selectedIndex && '↵'}
                                         </div>
                                     </div>
@@ -243,8 +243,8 @@ export default function NavigationMenu() {
                             )}
                         </div>
 
-                        {/* Footer with keyboard shortcuts */}
-                        <div className="px-4 py-2 border-t border-cyan-900/20 bg-gray-900/50">
+                        {/* Footer with keyboard shortcuts - only on desktop */}
+                        <div className="hidden sm:block px-4 py-2 border-t border-cyan-900/20 bg-gray-900/50">
                             <div className="flex items-center gap-4 text-xs text-gray-500">
                                 <span className="flex items-center gap-1">
                                     <kbd className="px-1 py-0.5 bg-gray-800 border border-gray-700 rounded">↑↓</kbd>
