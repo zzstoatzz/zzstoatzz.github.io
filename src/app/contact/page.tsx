@@ -36,7 +36,7 @@ export default function Contact() {
                             height={24}
                             className="contact-icon invert brightness-100"
                         />
-                        <a href="https://twitter.com/Nathan_Nowack" target="_blank" rel="noopener noreferrer" className="contact-link">@Nathan_Nowack</a>
+                        <a href="https://twitter.com/zzstoatzz" target="_blank" rel="noopener noreferrer" className="contact-link">@zzstoatzz</a>
                     </li>
                     <li className="contact-item">
                         <svg className="contact-icon w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
