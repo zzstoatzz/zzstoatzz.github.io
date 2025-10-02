@@ -12,7 +12,7 @@ interface SoundCloudWidget {
 export default function SoundCloudPlayer() {
     const [isMinimized, setIsMinimized] = useState(true);
     const [shouldShow] = useState(true); // Remove setShouldShow since it's not used
-    const [username, setUsername] = useState("larryfisherman");
+    const [username, setUsername] = useState("geeseband");
     const [showUsernameModal, setShowUsernameModal] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const widgetRef = useRef<SoundCloudWidget | null>(null); // Use our new type instead of any
@@ -196,7 +196,7 @@ export default function SoundCloudPlayer() {
                             placeholder="Enter SoundCloud username"
                         />
                         <div className="text-xs text-gray-500 mt-2 text-center opacity-50">
-                            type a soundcloud username and hit Enter   (e.g. larryfisherman)
+                            type a soundcloud username and hit Enter   (e.g. geeseband)
                         </div>
                     </div>
                 </div>
