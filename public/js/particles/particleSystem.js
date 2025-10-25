@@ -250,10 +250,10 @@ export class ParticleSystem {
 		if (!this.isMouseDown && this.releaseMultiplier <= 1) return;
 
 		const settings = this.settingsManager.getAllSettings();
-		
-		// If charging effects are disabled, use basic force without multipliers
+
+		// If vortex force is disabled, use basic force without multipliers
 		let radius, force;
-		if (settings.DISABLE_CHARGING_EFFECTS) {
+		if (!settings.ENABLE_VORTEX_FORCE) {
 			radius = settings.EXPLOSION_RADIUS;
 			force = settings.EXPLOSION_FORCE;
 		} else {
@@ -327,8 +327,8 @@ export class ParticleSystem {
 						const dirX = dx / distance;
 						const dirY = dy / distance;
 
-						// Check if charging effects are disabled
-						if (settings.DISABLE_CHARGING_EFFECTS) {
+						// Check if vortex force is disabled
+						if (!settings.ENABLE_VORTEX_FORCE) {
 							// Simple radial force only, no vortex
 							particle.vx += dirX * strength;
 							particle.vy += dirY * strength;
@@ -645,8 +645,8 @@ export class ParticleSystem {
 	updateAndDrawMouseEffects(timestamp) {
 		const settings = this.settingsManager.getAllSettings();
 
-		// If charging effects are disabled, skip all visual effects
-		if (settings.DISABLE_CHARGING_EFFECTS) {
+		// If vortex force is disabled, skip all visual effects
+		if (!settings.ENABLE_VORTEX_FORCE) {
 			return;
 		}
 
@@ -1187,9 +1187,9 @@ export class ParticleSystem {
 		const duration = (performance.now() - this.holdStartTime) / 1000;
 		
 		const settings = this.settingsManager.getAllSettings();
-		
-		// If charging effects are disabled, skip all charging/release effects
-		if (settings.DISABLE_CHARGING_EFFECTS) {
+
+		// If vortex force is disabled, skip all charging/release effects
+		if (!settings.ENABLE_VORTEX_FORCE) {
 			this.releaseMultiplier = 1;
 			this.holdStartTime = null;
 			return;

@@ -15,7 +15,7 @@ export const RANGES = {
 	CONNECTION_COLOR: { default: "#64ffda" },
 	CONNECTION_WIDTH: { min: 0.1, max: 2, step: 0.1, default: 0.3 },
 	PARTICLE_COLOR: { default: "#64ffda" },
-	DISABLE_CHARGING_EFFECTS: { default: false },
+	ENABLE_VORTEX_FORCE: { default: false },
 };
 
 // Generate default settings object from the RANGES
@@ -363,10 +363,10 @@ export const PARTICLE_CONTROLS_TEMPLATE = `
         </div>
         
         <div class="control-group">
-            <label for="DISABLE_CHARGING_EFFECTS">Disable Charging Effects</label>
+            <label for="ENABLE_VORTEX_FORCE">Enable Vortex Force</label>
             <div class="control-row">
-                <input type="checkbox" id="DISABLE_CHARGING_EFFECTS" ${RANGES.DISABLE_CHARGING_EFFECTS.default ? 'checked' : ''}>
-                <span class="value-display">Basic mouse force only</span>
+                <input type="checkbox" id="ENABLE_VORTEX_FORCE" ${RANGES.ENABLE_VORTEX_FORCE.default ? 'checked' : ''}>
+                <span class="value-display">special mouse force</span>
             </div>
         </div>
         

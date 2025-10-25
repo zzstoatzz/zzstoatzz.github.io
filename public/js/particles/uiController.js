@@ -329,7 +329,7 @@ export class UIController {
 		const categories = {
 			'particles': ['PARTICLE_COUNT', 'GRAVITY', 'AVERAGE_PARTICLE_SIZE', 'DRAG', 'ELASTICITY'],
 			'connections': ['INTERACTION_RADIUS', 'CONNECTION_OPACITY', 'CONNECTION_WIDTH', 'CONNECTION_COLOR'],
-			'forces': ['EXPLOSION_RADIUS', 'EXPLOSION_FORCE', 'ATTRACT', 'SMOOTHING_FACTOR', 'DISABLE_CHARGING_EFFECTS']
+			'forces': ['EXPLOSION_RADIUS', 'EXPLOSION_FORCE', 'ATTRACT', 'SMOOTHING_FACTOR', 'ENABLE_VORTEX_FORCE']
 		};
 		
 		for (const [category, keys] of Object.entries(categories)) {
@@ -352,13 +352,13 @@ export class UIController {
 							</div>
 						</div>
 					`;
-				} else if (key === 'DISABLE_CHARGING_EFFECTS') {
+				} else if (key === 'ENABLE_VORTEX_FORCE') {
 					html += `
 						<div class="control-group">
 							<label for="${key}">${labelText}</label>
 							<div class="slider-row">
 								<input type="checkbox" id="${key}" ${range.default ? 'checked' : ''}>
-								<span class="value-display">basic mouse force only</span>
+								<span class="value-display">special mouse force</span>
 							</div>
 						</div>
 					`;
@@ -454,16 +454,16 @@ export class UIController {
 		}
 		
 		// Checkbox controls
-		const disableChargingCheckbox = document.getElementById("DISABLE_CHARGING_EFFECTS");
-		if (disableChargingCheckbox) {
+		const vortexForceCheckbox = document.getElementById("ENABLE_VORTEX_FORCE");
+		if (vortexForceCheckbox) {
 			const handleCheckboxChange = (e) => {
 				const value = e.target.checked;
-				this.onSettingChange("DISABLE_CHARGING_EFFECTS", value);
+				this.onSettingChange("ENABLE_VORTEX_FORCE", value);
 			};
-			
-			const newCheckbox = disableChargingCheckbox.cloneNode(true);
-			disableChargingCheckbox.parentNode.replaceChild(newCheckbox, disableChargingCheckbox);
-			
+
+			const newCheckbox = vortexForceCheckbox.cloneNode(true);
+			vortexForceCheckbox.parentNode.replaceChild(newCheckbox, vortexForceCheckbox);
+
 			newCheckbox.addEventListener('change', handleCheckboxChange);
 			newCheckbox.addEventListener('touchstart', (e) => {
 				e.stopPropagation();
