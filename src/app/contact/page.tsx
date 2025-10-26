@@ -29,14 +29,14 @@ export default function Contact() {
                         <a href="mailto:zzstoatzz@protonmail.com" className="contact-link">zzstoatzz@protonmail.com</a>
                     </li>
                     <li className="contact-item">
-                        <Image 
-                            src="/assets/images/x-icon.png"
-                            alt="X (formerly Twitter)"
+                        <Image
+                            src="https://avatar.tangled.sh/e0e5f3c79065f994784e88013901408d166b8fdaefbb684225c96810d38e000d/did:plc:wshs7t2adsemcrrd4snkeqli"
+                            alt="Tangled"
                             width={24}
                             height={24}
-                            className="contact-icon invert brightness-100"
+                            className="contact-icon brightness-100"
                         />
-                        <a href="https://twitter.com/zzstoatzz" target="_blank" rel="noopener noreferrer" className="contact-link">@zzstoatzz</a>
+                        <a href="http://tangled.org/@zzstoatzz.io" target="_blank" rel="noopener noreferrer" className="contact-link">tangled.org/@zzstoatzz.io</a>
                     </li>
                     <li className="contact-item">
                         <svg className="contact-icon w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

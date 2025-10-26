@@ -33,6 +33,18 @@ const links = [
         link: "https://blog.zzstoatzz.io",
         source: "bearblog",
     },
+    {
+        title: "at-me",
+        description: "interactive introduction to open social",
+        link: "https://at-me.fly.dev",
+        source: "fly.dev",
+    },
+    {
+        title: "find-bufo",
+        description: "hybrid semantic search for bufos",
+        link: "https://find-bufo.fly.dev",
+        source: "fly.dev",
+    },
 
 ];
 
