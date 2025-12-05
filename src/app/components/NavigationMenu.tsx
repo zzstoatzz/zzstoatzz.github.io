@@ -8,6 +8,14 @@ interface StatusData {
     emoji?: string;
 }
 
+interface PlayRecord {
+    trackName: string;
+    artists: { artistName: string }[];
+    originUrl: string;
+    playedTime: string;
+    thumbnailUrl?: string;
+}
+
 interface NavItem {
     href: string;
     label: string;
@@ -26,6 +34,7 @@ export default function NavigationMenu() {
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [mounted, setMounted] = useState(false);
     const [statusData, setStatusData] = useState<StatusData | null>(null);
+    const [lastPlay, setLastPlay] = useState<PlayRecord | null>(null);
     const router = useRouter();
     const pathname = usePathname();
 
@@ -81,6 +90,40 @@ export default function NavigationMenu() {
 
         fetchStatus();
         const id = setInterval(fetchStatus, 60_000);
+        return () => {
+            cancelled = true;
+            controller.abort();
+            clearInterval(id);
+        };
+    }, [mounted]);
+
+    // Last played track fetching from ATProto
+    useEffect(() => {
+        if (!mounted) return;
+
+        let cancelled = false;
+        const controller = new AbortController();
+
+        async function fetchLastPlay() {
+            try {
+                const res = await fetch(
+                    'https://pds.zzstoatzz.io/xrpc/com.atproto.repo.listRecords?repo=did:plc:xbtmt2zjwlrfegqvch7fboei&collection=fm.teal.alpha.feed.play&limit=1',
+                    { signal: controller.signal, cache: 'no-store' }
+                );
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                if (!cancelled && data.records?.[0]?.value) {
+                    const play = data.records[0].value as PlayRecord;
+
+                    setLastPlay(play);
+                }
+            } catch {
+                if (!cancelled) setLastPlay(null);
+            }
+        }
+
+        fetchLastPlay();
+        const id = setInterval(fetchLastPlay, 60_000);
         return () => {
             cancelled = true;
             controller.abort();
@@ -215,30 +258,45 @@ export default function NavigationMenu() {
                                 </button>
                             ))}
                             
-                            {/* Status section */}
-                            {statusData && (
-                                <div className="px-4 py-3 border-t border-cyan-900/30 mt-2">
-                                    <a
-                                        href="https://status.zzstoatzz.io"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="block text-sm font-light text-cyan-300 hover:text-cyan-200 transition-colors"
-                                        aria-label="Current status"
-                                    >
-                                        <span className="mr-1 text-cyan-400/80">status:</span>
-                                        {statusData.emoji && !statusData.emoji.startsWith('custom:') && (
-                                            <span aria-hidden className="mr-1">{statusData.emoji}</span>
-                                        )}
-                                        {statusData.text ? (
-                                            <span>{statusData.text}</span>
-                                        ) : statusData.emoji?.startsWith('custom:') ? (
-                                            <span className="text-xs">{statusData.emoji.replace('custom:', '')}</span>
-                                        ) : statusData.emoji ? (
-                                            <span className="text-xs">vibing</span>
-                                        ) : (
-                                            <span className="text-xs">status unknown</span>
-                                        )}
-                                    </a>
+                            {/* Status & last played section */}
+                            {(statusData || lastPlay) && (
+                                <div className="px-4 py-3 border-t border-cyan-900/30 mt-2 space-y-3">
+                                    {statusData && (
+                                        <a
+                                            href="https://status.zzstoatzz.io"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-2 text-sm text-cyan-300 hover:text-cyan-200 transition-colors"
+                                            aria-label="Current status"
+                                        >
+                                            <span className="text-gray-500">status:</span>
+                                            {statusData.emoji && !statusData.emoji.startsWith('custom:') && (
+                                                <span aria-hidden>{statusData.emoji}</span>
+                                            )}
+                                            {statusData.text ? (
+                                                <span>{statusData.text}</span>
+                                            ) : statusData.emoji?.startsWith('custom:') ? (
+                                                <span>{statusData.emoji.replace('custom:', '')}</span>
+                                            ) : statusData.emoji ? (
+                                                <span>vibing</span>
+                                            ) : (
+                                                <span>status unknown</span>
+                                            )}
+                                        </a>
+                                    )}
+                                    {lastPlay && lastPlay.originUrl?.includes('plyr.fm') && (
+                                        <div className="mt-2">
+                                            <span className="text-gray-500 text-sm block mb-1">last listened:</span>
+                                            <iframe
+                                                src={lastPlay.originUrl.replace('/track/', '/embed/track/')}
+                                                width="100%"
+                                                height="80"
+                                                frameBorder="0"
+                                                allow="autoplay"
+                                                style={{ borderRadius: '6px' }}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
