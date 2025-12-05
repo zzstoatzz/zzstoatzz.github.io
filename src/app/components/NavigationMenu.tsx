@@ -263,7 +263,7 @@ export default function NavigationMenu() {
                                 <div className="px-4 py-3 border-t border-cyan-900/30 mt-2 space-y-3">
                                     {statusData && (
                                         <a
-                                            href="https://status.zzstoatzz.io"
+                                            href="https://status.zzstoatzz.io/@zzstoatzz.io"
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="flex items-center gap-2 text-sm text-cyan-300 hover:text-cyan-200 transition-colors"
