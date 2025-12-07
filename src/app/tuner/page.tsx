@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useCallback, type FC } from "react";
 import { PitchDetector, frequencyToNoteDetails } from '@/utils/pitch-detector';
 
-const MIN_CLARITY_THRESHOLD = 0.7; // Minimum clarity to display note
-const MAX_SEMITONE_JUMP = 3.0; // Max jump in semitones to accept for smoothing
+const MIN_CLARITY_THRESHOLD = 0.5; // Minimum clarity to display note (low since clarity is usually high)
+const CONSECUTIVE_FRAMES_TO_SWITCH = 2; // Require N consecutive frames of different note before switching
 
 const TunerPage: FC = () => {
 	const [frequency, setFrequency] = useState<number | null>(null);
@@ -12,54 +12,69 @@ const TunerPage: FC = () => {
 	const [clarity, setClarity] = useState<number>(0);
 	const [isListening, setIsListening] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	
+
 	// Ref to hold the PitchDetector instance
 	const pitchDetectorRef = useRef<PitchDetector | null>(null);
-	// Ref to store the last stable frequency used for note display
-	const stableFrequencyRef = useRef<number | null>(null);
+	// Track consecutive frames of a candidate note before switching
+	const candidateNoteRef = useRef<{ note: string; octave: number; count: number } | null>(null);
+	// Track the current displayed note for comparison
+	const currentNoteRef = useRef<{ note: string; octave: number } | null>(null);
 
 	// Callback function passed to the detector
 	const handlePitchUpdate = useCallback((detectedFrequency: number | null, detectedClarity: number) => {
-		// Always update the raw frequency and clarity display
 		setFrequency(detectedFrequency);
 		setClarity(detectedClarity);
-		
-		if (detectedFrequency && detectedClarity >= MIN_CLARITY_THRESHOLD) {
-			let updateNote = false;
 
-			if (stableFrequencyRef.current === null) {
-				// If no stable frequency yet, accept the first valid one
-				updateNote = true;
-			} else {
-				// Calculate difference from last stable frequency in semitones
-				const diffSemitones = Math.abs(12 * Math.log2(detectedFrequency / stableFrequencyRef.current));
-				
-				if (diffSemitones < MAX_SEMITONE_JUMP) {
-					// If the jump is small enough, accept it
-					updateNote = true;
-				} else {
-					// Large jump detected, likely an error or harmonic - ignore for note display
-				}
-			}
-
-			if (updateNote) {
-				const details = frequencyToNoteDetails(detectedFrequency);
-				setNoteDetails(details);
-				stableFrequencyRef.current = detectedFrequency; // Update stable frequency
-			} 
-			// If !updateNote, we keep the existing noteDetails and stableFrequencyRef
-
-		} else {
-			// If clarity is too low or frequency is null, clear the note and stable frequency
+		if (!detectedFrequency || detectedClarity < MIN_CLARITY_THRESHOLD) {
 			setNoteDetails(null);
-			stableFrequencyRef.current = null;
+			currentNoteRef.current = null;
+			candidateNoteRef.current = null;
+			return;
 		}
-	}, []); // No dependencies needed
+
+		const newDetails = frequencyToNoteDetails(detectedFrequency);
+		if (!newDetails) return;
+
+		const current = currentNoteRef.current;
+
+		// First detection or no current note
+		if (!current) {
+			setNoteDetails(newDetails);
+			currentNoteRef.current = { note: newDetails.note, octave: newDetails.octave };
+			candidateNoteRef.current = null;
+			return;
+		}
+
+		const isSameNote = current.note === newDetails.note && current.octave === newDetails.octave;
+
+		if (isSameNote) {
+			// Same note - always update (cents will change)
+			setNoteDetails(newDetails);
+			candidateNoteRef.current = null;
+		} else {
+			// Different note - require consecutive frames before switching
+			const candidate = candidateNoteRef.current;
+			if (candidate && candidate.note === newDetails.note && candidate.octave === newDetails.octave) {
+				candidate.count++;
+				if (candidate.count >= CONSECUTIVE_FRAMES_TO_SWITCH) {
+					// Switch to new note
+					setNoteDetails(newDetails);
+					currentNoteRef.current = { note: newDetails.note, octave: newDetails.octave };
+					candidateNoteRef.current = null;
+				}
+				// Otherwise keep current note displayed (don't update cents from wrong note)
+			} else {
+				// New candidate
+				candidateNoteRef.current = { note: newDetails.note, octave: newDetails.octave, count: 1 };
+			}
+		}
+	}, []);
 
 	const handleStart = useCallback(async () => {
 		setError(null); // Clear previous errors
 		if (pitchDetectorRef.current) return; // Already started
-		stableFrequencyRef.current = null; // Reset stable frequency on start
+		currentNoteRef.current = null;
+		candidateNoteRef.current = null;
 
 		try {
 			// Configure and create the detector instance
@@ -88,15 +103,16 @@ const TunerPage: FC = () => {
 	const handleStop = useCallback(() => {
 		pitchDetectorRef.current?.stop();
 		pitchDetectorRef.current = null;
-		
+
 		// Reset state
 		setIsListening(false);
 		setFrequency(null);
 		setNoteDetails(null);
 		setClarity(0);
 		setError(null);
-		stableFrequencyRef.current = null; // Reset stable frequency on stop
-	}, []); // No dependencies needed as it only accesses ref and setters
+		candidateNoteRef.current = null;
+		currentNoteRef.current = null;
+	}, []);
 
 	// Cleanup on unmount
 	useEffect(() => {
