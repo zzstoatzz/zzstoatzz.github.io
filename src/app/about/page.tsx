@@ -28,16 +28,28 @@ const links = [
         source: "github",
     },
     {
+        title: "fastmcp",
+        description: "the fast, pythonic way to build MCP servers and clients",
+        link: "https://github.com/jlowin/fastmcp",
+        source: "github",
+    },
+    {
         title: "blog",
         description: "writing about programming and other things",
         link: "https://blog.zzstoatzz.io",
         source: "bearblog",
     },
     {
+        title: "plyr.fm",
+        description: "audio streaming platform on atproto",
+        link: "https://plyr.fm",
+        source: "plyr.fm",
+    },
+    {
         title: "at-me",
         description: "interactive introduction to open social",
-        link: "https://at-me.fly.dev",
-        source: "fly.dev",
+        link: "https://at-me.zzstoatzz.io",
+        source: "at-me",
     },
     {
         title: "find-bufo",
