@@ -69,7 +69,7 @@ export default function About() {
                     Hello! My name is Nate - software engineer and ChE grad from the University of Michigan. I grew up in the Upper Peninsula of Michigan and currently live in Logan Square, Chicago.
                 </p>
                 <p>
-                    I am a physicist at heart and love graph theory. I want to build an evolutionary, ant-colony-ish network of LLMs that I can defer my most annoying tasks to.
+                    I am a physicist at heart and love graph theory. I also love listening to and playing music.
                 </p>
                 <p>
                     Feel free to <Link href="/contact" className="about-link">get in touch</Link> if you have an idea for a project or just want to chat!
