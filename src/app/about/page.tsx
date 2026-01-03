@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import LinkCard from '@/app/components/LinkCard';
+import ShippedThisMonth from '@/app/components/ShippedThisMonth';
 
 const links = [
     {
@@ -82,6 +83,8 @@ export default function About() {
                     <LinkCard key={link.title} {...link} />
                 ))}
             </div>
+
+            <ShippedThisMonth />
         </main>
     );
 }
