@@ -19,7 +19,6 @@ const sections: Section[] = [
         title: "at protocol apps",
         projects: [
             { name: "plyr.fm", description: "music streaming platform", url: "https://plyr.fm" },
-            { name: "ooo.audio", description: "audio social platform", url: "https://ooo.audio" },
             { name: "music-atmosphere-feed", description: "bluesky feeds for music links", url: "https://zig-bsky-feed.fly.dev" },
             { name: "leaflet-search", description: "semantic + keyword search", url: "https://leaflet-search.pages.dev" },
             { name: "find-bufo", description: "hybrid search for bufo zone", url: "https://find-bufo.com" },
@@ -28,7 +27,6 @@ const sections: Section[] = [
             { name: "status", description: "slack-like status updates", url: "https://status.zzstoatzz.io" },
             { name: "pollz", description: "polls on atproto", url: "https://pollz.waow.tech" },
             { name: "bsky-alt-text", description: "claude-powered alt text", url: "https://alt-text-generator.fly.dev" },
-            { name: "follower-weight", description: "bluesky follower analysis", url: "https://follower-weight.fly.dev" },
         ]
     },
     {
@@ -36,10 +34,8 @@ const sections: Section[] = [
         projects: [
             { name: "pdsx", description: "mcp server for atproto", url: "https://github.com/zzstoatzz/pdsx" },
             { name: "plyr-python-client", description: "sdk + cli + mcp for plyr.fm", url: "https://github.com/zzstoatzz/plyr-python-client" },
-            { name: "pmgfal", description: "pydantic model gen for lexicons", url: "https://github.com/zzstoatzz/pmgfal" },
             { name: "mdxify", description: "api docs generator", url: "https://github.com/zzstoatzz/mdxify" },
             { name: "zql", description: "comptime sql bindings for zig", url: "https://tangled.sh/@zzstoatzz.io/zql" },
-            { name: "hello-tinker", description: "chat cli for tinker llms", url: "https://github.com/zzstoatzz/hello-tinker" },
             { name: "atproto", description: "oauth fixes for python sdk", url: "https://github.com/zzstoatzz/atproto" },
         ]
     },
@@ -56,8 +52,7 @@ const sections: Section[] = [
 const themes = [
     "mcp servers everywhere - pdsx, plyrfm-mcp, prefect-mcp-server",
     "zig backends - music-atmosphere-feed, leaflet-search, pollz, find-bufo/bot, zql",
-    "rust services - find-bufo search, pmgfal (pyo3), plyr.fm transcoder",
-    "shared audio lexicon - plyr.fm + ooo.audio coordination",
+    "rust services - find-bufo search, plyr.fm transcoder",
     "docket adoption - converted 7 prefect services to perpetual functions",
 ];
 
