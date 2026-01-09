@@ -26,7 +26,6 @@ const sections: Section[] = [
             { name: "at-me", description: "identity & apps visualizer", url: "https://at-me.zzstoatzz.io" },
             { name: "status", description: "slack-like status updates", url: "https://status.zzstoatzz.io" },
             { name: "pollz", description: "polls on atproto", url: "https://pollz.waow.tech" },
-            { name: "bsky-alt-text", description: "claude-powered alt text", url: "https://alt-text-generator.fly.dev" },
         ]
     },
     {
