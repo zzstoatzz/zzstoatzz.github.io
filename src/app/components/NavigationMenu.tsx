@@ -58,7 +58,7 @@ export default function NavigationMenu() {
         setMounted(true);
     }, []);
 
-    // Status fetching
+    // Status fetching from ATProto
     useEffect(() => {
         if (!mounted) return;
 
@@ -67,21 +67,20 @@ export default function NavigationMenu() {
 
         async function fetchStatus() {
             try {
-                const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent('https://status.zzstoatzz.io/json')}`, {
-                    signal: controller.signal,
-                    cache: 'no-store',
-                });
+                const res = await fetch(
+                    'https://pds.zzstoatzz.io/xrpc/com.atproto.repo.listRecords?repo=did:plc:xbtmt2zjwlrfegqvch7fboei&collection=io.zzstoatzz.status.record&limit=1',
+                    { signal: controller.signal, cache: 'no-store' }
+                );
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const proxyData = await res.json();
-                const data = JSON.parse(proxyData.contents) as StatusData;
-                if (!cancelled && data) {
-                    const statusInfo = {
-                        text: (data.text || '').trim(),
-                        emoji: (data.emoji || '').trim()
-                    };
-                    setStatusData(statusInfo);
+                const data = await res.json();
+                if (!cancelled && data.records?.[0]?.value) {
+                    const record = data.records[0].value;
+                    setStatusData({
+                        text: (record.text || '').trim(),
+                        emoji: (record.emoji || '').trim()
+                    });
                 }
-            } catch (error) {
+            } catch {
                 if (!cancelled) {
                     setStatusData(null);
                 }
