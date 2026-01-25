@@ -269,13 +269,24 @@ export default function NavigationMenu() {
                                             aria-label="Current status"
                                         >
                                             <span className="text-gray-500">status:</span>
-                                            {statusData.emoji && !statusData.emoji.startsWith('custom:') && (
-                                                <span aria-hidden>{statusData.emoji}</span>
+                                            {statusData.emoji && (
+                                                statusData.emoji.startsWith('custom:') ? (
+                                                    <img
+                                                        src={`https://all-the.bufo.zone/${statusData.emoji.slice(7)}.png`}
+                                                        alt={statusData.emoji.slice(7)}
+                                                        className="w-5 h-5 object-contain"
+                                                        onError={(e) => {
+                                                            (e.target as HTMLImageElement).src = `https://all-the.bufo.zone/${statusData.emoji!.slice(7)}.gif`;
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <span aria-hidden>{statusData.emoji}</span>
+                                                )
                                             )}
                                             {statusData.text ? (
                                                 <span>{statusData.text}</span>
                                             ) : statusData.emoji?.startsWith('custom:') ? (
-                                                <span>{statusData.emoji.replace('custom:', '')}</span>
+                                                <span>{statusData.emoji.replace('custom:', '').replace(/-/g, ' ')}</span>
                                             ) : statusData.emoji ? (
                                                 <span>vibing</span>
                                             ) : (
