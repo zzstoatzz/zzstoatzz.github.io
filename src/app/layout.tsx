@@ -31,6 +31,12 @@ export default function RootLayout({
     return (
         <html lang="en" className={`${firaCode.variable} font-sans`}>
             <head>
+                <script
+                    type="importmap"
+                    dangerouslySetInnerHTML={{
+                        __html: '{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/"}}'
+                    }}
+                />
                 <Script
                     src="https://www.googletagmanager.com/gtag/js?id=G-SLML4CSJ70"
                     strategy="afterInteractive"

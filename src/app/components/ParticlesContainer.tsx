@@ -11,7 +11,7 @@ interface RouterInstance {
 
 declare global {
     interface Window {
-        particlesInit: (canvas: HTMLCanvasElement) => void;
+        particlesInit: (canvas: HTMLCanvasElement, overlay?: HTMLCanvasElement) => void;
         nextRouter: RouterInstance;
     }
 }
@@ -19,6 +19,7 @@ declare global {
 export function ParticlesContainer() {
     const particlesInitialized = useRef<boolean>(false);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const overlayRef = useRef<HTMLCanvasElement>(null);
     const router = useRouter();
 
     useEffect(() => {
@@ -34,7 +35,14 @@ export function ParticlesContainer() {
                 const canvas = canvasRef.current;
                 canvas.width = window.innerWidth;
                 canvas.height = window.innerHeight;
-                window.particlesInit(canvas);
+
+                const overlay = overlayRef.current;
+                if (overlay) {
+                    overlay.width = window.innerWidth;
+                    overlay.height = window.innerHeight;
+                }
+
+                window.particlesInit(canvas, overlay || undefined);
                 particlesInitialized.current = true;
             }
         };
@@ -59,6 +67,12 @@ export function ParticlesContainer() {
                 className="fixed inset-0 w-full h-full z-0"
                 style={{ pointerEvents: 'none' }}
             />
+            <canvas
+                id="particle-overlay"
+                ref={overlayRef}
+                className="fixed inset-0 w-full h-full z-0"
+                style={{ pointerEvents: 'none' }}
+            />
             <Script
                 src="/js/particles/main.js"
                 strategy="afterInteractive"
@@ -73,7 +87,14 @@ export function ParticlesContainer() {
                         const canvas = canvasRef.current;
                         canvas.width = window.innerWidth;
                         canvas.height = window.innerHeight;
-                        window.particlesInit(canvas);
+
+                        const overlay = overlayRef.current;
+                        if (overlay) {
+                            overlay.width = window.innerWidth;
+                            overlay.height = window.innerHeight;
+                        }
+
+                        window.particlesInit(canvas, overlay || undefined);
                         particlesInitialized.current = true;
                     }
                 }}

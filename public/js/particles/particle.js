@@ -1,4 +1,4 @@
-import { MIN_RANDOM_SIZE, MAX_RANDOM_SIZE, SIZE_VARIATION_FACTOR } from "./config.js";
+import { MIN_RANDOM_SIZE, MAX_RANDOM_SIZE, SIZE_VARIATION_FACTOR, PARTICLE_COLORS } from "./config.js";
 
 export class Particle {
     constructor(x, y, settings) {
@@ -33,15 +33,8 @@ export class Particle {
         this.mass = Math.PI * this.radius * this.radius;
     }
 
-    getRandomColor(settings) {
-        // Access the particle colors from the global window scope if available
-        if (window.particleSystem?.PARTICLE_COLORS) {
-            const colors = window.particleSystem.PARTICLE_COLORS;
-            return colors[Math.floor(Math.random() * colors.length)];
-        }
-        
-        // Fallback color
-        return settings.PARTICLE_COLOR || '#64ffda';
+    getRandomColor() {
+        return PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)];
     }
 
     updateSettings(settings) {

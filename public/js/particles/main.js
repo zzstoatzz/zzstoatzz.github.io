@@ -1,38 +1,25 @@
 import { ParticleSystem } from './particleSystem.js';
 
 // Main initialization function
-function init(canvas) {
+function init(canvas, overlayCanvas) {
     if (!canvas) {
         console.error('Canvas element not found');
         return;
     }
 
-    // Canvas uses pointer events 'none' to allow scrolling, events handled on document
-    
-    // Create particle system (handles its own settings internally)
-    const particleSystem = new ParticleSystem(canvas);
-    
-    // Make the particle system globally accessible for debugging
+    // Clean up any existing instance to prevent double-init
+    if (window.particleSystem) {
+        window.particleSystem.stop();
+        if (window.particleSystem.webglRenderer) {
+            window.particleSystem.webglRenderer.dispose();
+        }
+        window.particleSystem = null;
+    }
+
+    const particleSystem = new ParticleSystem(canvas, overlayCanvas || null);
     window.particleSystem = particleSystem;
-    
     return particleSystem;
 }
 
-// Make init function globally accessible
+// Make init function globally accessible (React calls this via ParticlesContainer)
 window.particlesInit = init;
-
-// Auto-init if DOM is already loaded
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    const canvas = document.getElementById('particle-canvas');
-    if (canvas) {
-        init(canvas);
-    }
-} else {
-    // Otherwise wait for DOMContentLoaded
-    document.addEventListener('DOMContentLoaded', () => {
-        const canvas = document.getElementById('particle-canvas');
-        if (canvas) {
-            init(canvas);
-        }
-    });
-} 
