@@ -299,11 +299,12 @@ export default function NavigationMenu() {
                                             <span className="text-gray-500 text-sm block mb-1">last listened:</span>
                                             <iframe
                                                 src={lastPlay.originUrl.replace('/track/', '/embed/track/')}
+                                                title="last listened track"
                                                 width="100%"
-                                                height="80"
+                                                height="165"
                                                 frameBorder="0"
                                                 allow="autoplay"
-                                                style={{ borderRadius: '6px' }}
+                                                style={{ borderRadius: '6px', border: 'none' }}
                                             />
                                         </div>
                                     )}
