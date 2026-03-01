@@ -137,18 +137,18 @@ export default function PlyrFmPlayer() {
                 {/* expanded content */}
                 <div className={`flex-1 flex flex-col min-h-0 transition-all duration-200 ${isMinimized ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100'}`}>
                     {/* search */}
-                    <div className="relative px-3 py-2 shrink-0" ref={resultsRef}>
+                    <div className="relative shrink-0" ref={resultsRef}>
                         <input
                             type="text"
                             value={query}
                             onChange={(e) => handleInput(e.target.value)}
                             onFocus={() => results.length > 0 && setShowResults(true)}
-                            className="w-full bg-transparent border-b border-cyan-300/30 text-cyan-300 text-sm px-2 py-1 focus:outline-none focus:border-cyan-300"
+                            className="w-full bg-transparent text-cyan-300 text-sm px-4 py-2 focus:outline-none placeholder:text-gray-500"
                             placeholder="search on plyr.fm"
                             onClick={(e) => e.stopPropagation()}
                         />
                         {showResults && (
-                            <div className="absolute left-3 right-3 bottom-full mb-1 bg-black/95 border border-cyan-300/20 rounded-lg max-h-48 overflow-y-auto z-[60]">
+                            <div className="absolute left-0 right-0 bottom-full mb-1 bg-black/95 border border-cyan-300/20 rounded-lg max-h-48 overflow-y-auto z-[60]">
                                 {results.map((r) => (
                                     <button
                                         key={r.id}
@@ -172,14 +172,14 @@ export default function PlyrFmPlayer() {
                     </div>
 
                     {/* iframe */}
-                    <div className="flex-1 min-h-0 px-1 pb-1">
+                    <div className="flex-1 min-h-0">
                         <iframe
                             title="plyr.fm player"
                             src={embedUrl}
                             width="100%"
                             height="100%"
                             allow="autoplay"
-                            className="rounded-b-lg"
+                            className="rounded-b-lg block"
                             style={{ border: 'none' }}
                         />
                     </div>
