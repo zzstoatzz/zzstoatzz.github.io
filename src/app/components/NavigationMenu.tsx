@@ -301,7 +301,7 @@ export default function NavigationMenu() {
                                                 src={lastPlay.originUrl.replace('/track/', '/embed/track/')}
                                                 title="last listened track"
                                                 width="100%"
-                                                height="165"
+                                                height="120"
                                                 frameBorder="0"
                                                 allow="autoplay"
                                                 style={{ borderRadius: '6px', border: 'none' }}
