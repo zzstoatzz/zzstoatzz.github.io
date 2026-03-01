@@ -4,7 +4,7 @@ import ConditionalLayout from './components/ConditionalLayout';
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import 'highlight.js/styles/atom-one-dark.css';
-import SoundCloudPlayer from './components/SoundCloudPlayer';
+import PlyrFmPlayer from './components/PlyrFmPlayer';
 import { BackgroundProvider } from './contexts/BackgroundContext';
 import BackgroundSwitcher from './components/BackgroundSwitcher';
 import Background from './components/Background';
@@ -60,7 +60,7 @@ export default function RootLayout({
                             {children}
                         </ConditionalLayout>
                     </div>
-                    <SoundCloudPlayer />
+                    <PlyrFmPlayer />
                 </BackgroundProvider>
             </body>
         </html>
