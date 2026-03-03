@@ -337,6 +337,9 @@ export class UIController {
 			ENABLE_VORTEX_FORCE: "special mouse force",
 			FIREHOSE_ENTROPY: "zlay relay weather",
 		};
+		const labelOverrides = {
+			FIREHOSE_ENTROPY_GAIN: "relay coupling",
+		};
 		
 		for (const [category, keys] of Object.entries(categories)) {
 			html += `<div class="control-group"><h4 style="margin-top: 0; margin-bottom: 10px; font-size: 11px; color: #64ffda;">${category}</h4>`;
@@ -346,7 +349,7 @@ export class UIController {
 				if (!range) continue;
 				
 				// Generate label based on key with better formatting
-				const labelText = key.toLowerCase().replace(/_/g, ' ');
+				const labelText = labelOverrides[key] || key.toLowerCase().replace(/_/g, ' ');
 				
 				if (key === 'CONNECTION_COLOR') {
 					html += `

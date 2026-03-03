@@ -8,21 +8,46 @@ function lerp(a, b, t) {
 	return a + (b - a) * t;
 }
 
-function fnv1a32(bytes) {
-	let hash = 0x811c9dc5;
-	for (let i = 0; i < bytes.length; i += 1) {
-		hash ^= bytes[i];
-		hash = Math.imul(hash, 0x01000193);
-	}
-	return hash >>> 0;
+function smoothstep(edge0, edge1, x) {
+	const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+	return t * t * (3 - 2 * t);
 }
 
-function pseudoRandom(seed) {
-	let x = seed >>> 0;
-	x ^= x << 13;
-	x ^= x >>> 17;
-	x ^= x << 5;
-	return (x >>> 0) / 4294967295;
+function wrapHue(hue) {
+	return ((hue % 360) + 360) % 360;
+}
+
+function hexToRgb(hex) {
+	if (typeof hex !== "string") return null;
+	const cleaned = hex.trim().replace("#", "");
+	if (!/^[0-9a-fA-F]{6}$/.test(cleaned)) return null;
+
+	return {
+		r: Number.parseInt(cleaned.slice(0, 2), 16),
+		g: Number.parseInt(cleaned.slice(2, 4), 16),
+		b: Number.parseInt(cleaned.slice(4, 6), 16),
+	};
+}
+
+function rgbToHue(rgb) {
+	if (!rgb) return 190;
+	const r = rgb.r / 255;
+	const g = rgb.g / 255;
+	const b = rgb.b / 255;
+	const max = Math.max(r, g, b);
+	const min = Math.min(r, g, b);
+	const delta = max - min;
+	if (delta === 0) return 0;
+
+	let hue = 0;
+	if (max === r) {
+		hue = ((g - b) / delta) % 6;
+	} else if (max === g) {
+		hue = (b - r) / delta + 2;
+	} else {
+		hue = (r - g) / delta + 4;
+	}
+	return wrapHue(hue * 60);
 }
 
 export class FirehoseEntropy {
@@ -31,62 +56,65 @@ export class FirehoseEntropy {
 		this.getViewport = getViewport;
 
 		this.enabled = false;
-		this.gain = 1;
+		this.gain = 0.75;
 		this.ws = null;
 		this.reconnectTimer = null;
-		this.reconnectDelayMs = 1200;
+		this.reconnectDelayMs = 1000;
 
-		this.messageCount = 0;
-		this.sampleStride = 14;
-		this.trafficBuckets = [];
-		this.activity = 0;
-		this.bandwidth = 0;
-		this.energy = 0;
-		this.pulseEnergy = 0;
-
-		this.hue = 190;
-		this.hueTarget = 190;
-		this.wind = { x: 0, y: 0 };
-		this.windTarget = { x: 0, y: 0 };
-
-		this.bursts = [];
-		this.trails = [];
 		this.decoder = new TextDecoder();
+		this.sampleStride = 18;
+		this.messageCount = 0;
+
+		this.buckets = [];
+		this.eventRate = 0;
+		this.byteRate = 0;
+
+		this.mixCreate = 0;
+		this.mixUpdate = 0;
+		this.mixDelete = 0;
+		this.mixMeta = 0;
+
+		this.energy = 0;
+		this.pulse = 0;
+		this.shear = 0;
+		this.windAngle = 0;
+		this.windSpeed = 0;
+		this.windAngleTarget = 0;
+		this.windSpeedTarget = 0;
+
+		this.baseHue = 190;
+		this.baseHueTarget = 190;
+		this.phase = 0;
 		this.lastFrameMs = 0;
 	}
 
 	setEnabled(enabled) {
-		if (enabled === this.enabled) {
-			return;
-		}
-
+		if (enabled === this.enabled) return;
 		this.enabled = enabled;
-		if (this.enabled) {
+		if (enabled) {
 			this.connect();
 		} else {
 			this.disconnect();
-			this.resetVisualState();
+			this.resetState();
 		}
 	}
 
 	setGain(gain) {
-		this.gain = clamp(Number.isFinite(gain) ? gain : 1, 0.1, 2);
+		this.gain = clamp(Number.isFinite(gain) ? gain : 0.75, 0.1, 1.5);
 	}
 
 	connect() {
-		if (!this.enabled || this.ws) {
-			return;
-		}
+		if (!this.enabled || this.ws) return;
 
 		const ws = new WebSocket(ZLAY_FIREHOSE_URL);
 		ws.binaryType = "arraybuffer";
 
 		ws.onopen = () => {
-			this.reconnectDelayMs = 1200;
+			this.reconnectDelayMs = 1000;
 		};
 
 		ws.onmessage = (event) => {
-			void this.handleRawMessage(event.data);
+			void this.handleMessage(event.data);
 		};
 
 		ws.onclose = () => {
@@ -98,24 +126,17 @@ export class FirehoseEntropy {
 			}
 		};
 
-		ws.onerror = () => {
-			ws.close();
-		};
-
+		ws.onerror = () => ws.close();
 		this.ws = ws;
 	}
 
 	scheduleReconnect() {
-		if (this.reconnectTimer || !this.enabled) {
-			return;
-		}
-
+		if (!this.enabled || this.reconnectTimer) return;
 		this.reconnectTimer = window.setTimeout(() => {
 			this.reconnectTimer = null;
 			this.connect();
 		}, this.reconnectDelayMs);
-
-		this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 1.6, 15000);
+		this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 1.6, 16000);
 	}
 
 	disconnect() {
@@ -129,327 +150,305 @@ export class FirehoseEntropy {
 		}
 	}
 
-	resetVisualState() {
+	resetState() {
+		this.buckets.length = 0;
+		this.eventRate = 0;
+		this.byteRate = 0;
+		this.mixCreate = 0;
+		this.mixUpdate = 0;
+		this.mixDelete = 0;
+		this.mixMeta = 0;
 		this.energy = 0;
-		this.pulseEnergy = 0;
-		this.bursts.length = 0;
-		this.trails.length = 0;
-		this.trafficBuckets.length = 0;
+		this.pulse = 0;
+		this.shear = 0;
+		this.windSpeed = 0;
+		this.windSpeedTarget = 0;
 	}
 
-	recordTraffic(nowMs, payloadSize) {
-		const bucketMs = Math.floor(nowMs / 250) * 250;
-		const last = this.trafficBuckets[this.trafficBuckets.length - 1];
-
-		if (last && last.t === bucketMs) {
-			last.count += 1;
-			last.bytes += payloadSize;
-		} else {
-			this.trafficBuckets.push({ t: bucketMs, count: 1, bytes: payloadSize });
+	recordTraffic(nowMs, bytes, category) {
+		const bucketTime = Math.floor(nowMs / 250) * 250;
+		let bucket = this.buckets[this.buckets.length - 1];
+		if (!bucket || bucket.t !== bucketTime) {
+			bucket = {
+				t: bucketTime,
+				count: 0,
+				bytes: 0,
+				create: 0,
+				update: 0,
+				delete: 0,
+				meta: 0,
+			};
+			this.buckets.push(bucket);
 		}
 
-		const cutoff = nowMs - 7000;
-		while (this.trafficBuckets.length > 0 && this.trafficBuckets[0].t < cutoff) {
-			this.trafficBuckets.shift();
+		bucket.count += 1;
+		bucket.bytes += bytes;
+		if (category === "create") bucket.create += 1;
+		else if (category === "update") bucket.update += 1;
+		else if (category === "delete") bucket.delete += 1;
+		else bucket.meta += 1;
+
+		const cutoff = nowMs - 9000;
+		while (this.buckets.length && this.buckets[0].t < cutoff) {
+			this.buckets.shift();
 		}
 	}
 
 	updateRates(nowMs) {
+		const cutoff = nowMs - 4500;
 		let count = 0;
 		let bytes = 0;
-		const cutoff = nowMs - 4000;
+		let create = 0;
+		let update = 0;
+		let del = 0;
+		let meta = 0;
 
-		for (const bucket of this.trafficBuckets) {
-			if (bucket.t >= cutoff) {
-				count += bucket.count;
-				bytes += bucket.bytes;
-			}
+		for (const bucket of this.buckets) {
+			if (bucket.t < cutoff) continue;
+			count += bucket.count;
+			bytes += bucket.bytes;
+			create += bucket.create;
+			update += bucket.update;
+			del += bucket.delete;
+			meta += bucket.meta;
 		}
 
-		this.activity = count / 4;
-		this.bandwidth = bytes / 4;
+		this.eventRate = count / 4.5;
+		this.byteRate = bytes / 4.5;
+
+		const total = Math.max(1, create + update + del + meta);
+		this.mixCreate = create / total;
+		this.mixUpdate = update / total;
+		this.mixDelete = del / total;
+		this.mixMeta = meta / total;
 	}
 
-	sniffEventKind(bytes) {
-		const headerText = this.decoder.decode(bytes.subarray(0, Math.min(220, bytes.length)));
-		if (headerText.includes("identity")) return "identity";
-		if (headerText.includes("account")) return "account";
-		if (headerText.includes("handle")) return "handle";
-		if (headerText.includes("commit")) return "commit";
-		return "unknown";
+	decodeCategory(sample) {
+		const text = this.decoder.decode(sample.subarray(0, Math.min(sample.length, 240)));
+		if (text.includes("fcreate")) return "create";
+		if (text.includes("fupdate")) return "update";
+		if (text.includes("fdelete")) return "delete";
+		return "meta";
 	}
 
-	eventHueOffset(kind) {
-		switch (kind) {
-			case "commit":
-				return 12;
-			case "identity":
-				return 140;
-			case "account":
-				return 220;
-			case "handle":
-				return 300;
-			default:
-				return 0;
+	kickField(sample, category) {
+		let hash = 2166136261;
+		for (let i = 0; i < sample.length; i += 16) {
+			hash ^= sample[i];
+			hash = Math.imul(hash, 16777619);
 		}
+		hash >>>= 0;
+
+		const angle = (hash / 4294967295) * Math.PI * 2;
+		this.windAngleTarget = angle;
+
+		const categoryBoost =
+			category === "create"
+				? 0.32
+				: category === "update"
+					? 0.22
+					: category === "delete"
+						? 0.4
+						: 0.14;
+
+		this.pulse = clamp(this.pulse + categoryBoost, 0, 1.6);
+		this.shear = clamp(this.shear + (sample.length > 3000 ? 0.18 : 0.1), 0, 1.2);
 	}
 
-	createBurst(nowMs, payloadSize, hash, kind) {
-		const { width, height } = this.getViewport();
-		if (!width || !height) {
-			return;
-		}
+	async handleMessage(rawData) {
+		if (!this.enabled) return;
 
-		const eventScale = clamp(Math.log2(payloadSize + 1) / 12, 0.25, 1.2);
-		const baseRand = pseudoRandom(hash);
-		const angleRand = pseudoRandom(hash ^ 0x9e3779b9);
-		const xRand = pseudoRandom(hash ^ 0xa24baed4);
-		const yRand = pseudoRandom(hash ^ 0x48b17db7);
-
-		const x = xRand * width;
-		const y = yRand * height;
-		const angle = angleRand * Math.PI * 2;
-		const hue = (this.hue + this.eventHueOffset(kind) + baseRand * 40) % 360;
-
-		this.bursts.push({
-			x,
-			y,
-			radius: 12 + eventScale * 28,
-			maxRadius: 85 + eventScale * 190,
-			life: 1,
-			hue,
-			twist: (baseRand - 0.5) * 0.8,
-			birth: nowMs,
-		});
-
-		const trailCount = 1 + Math.floor(eventScale * 3);
-		for (let i = 0; i < trailCount; i += 1) {
-			const localAngle = angle + (i - trailCount / 2) * 0.45;
-			const speed = 90 + eventScale * 240 + i * 24;
-			this.trails.push({
-				x,
-				y,
-				px: x,
-				py: y,
-				vx: Math.cos(localAngle) * speed,
-				vy: Math.sin(localAngle) * speed,
-				life: 0.9,
-				decay: 0.22 + i * 0.05,
-				hue: (hue + i * 12) % 360,
-				width: 1.2 + eventScale * 3,
-			});
-		}
-
-		const windStrength = 0.35 + eventScale * 1.8;
-		this.windTarget.x = Math.cos(angle) * windStrength;
-		this.windTarget.y = Math.sin(angle) * windStrength;
-		this.hueTarget = hue;
-		this.pulseEnergy = clamp(this.pulseEnergy + eventScale * 0.2, 0, 1.2);
-
-		if (this.bursts.length > 80) {
-			this.bursts.splice(0, this.bursts.length - 80);
-		}
-		if (this.trails.length > 220) {
-			this.trails.splice(0, this.trails.length - 220);
-		}
-	}
-
-	async handleRawMessage(rawData) {
-		if (!this.enabled) {
-			return;
-		}
-
-		let payloadSize = 0;
-		let sampledBytes = null;
+		let bytes = 0;
+		let sample = null;
 		this.messageCount += 1;
 
 		if (rawData instanceof ArrayBuffer) {
-			payloadSize = rawData.byteLength;
+			bytes = rawData.byteLength;
 			if (this.messageCount % this.sampleStride === 0) {
-				sampledBytes = new Uint8Array(rawData);
+				sample = new Uint8Array(rawData);
 			}
 		} else if (rawData instanceof Blob) {
-			payloadSize = rawData.size;
+			bytes = rawData.size;
 			if (this.messageCount % this.sampleStride === 0) {
-				const arrayBuffer = await rawData.arrayBuffer();
-				sampledBytes = new Uint8Array(arrayBuffer);
+				const ab = await rawData.arrayBuffer();
+				sample = new Uint8Array(ab);
 			}
 		}
 
-		const nowMs = performance.now();
-		this.recordTraffic(nowMs, payloadSize);
-
-		if (!sampledBytes || sampledBytes.length === 0) {
-			return;
+		let category = "meta";
+		if (sample && sample.length > 0) {
+			category = this.decodeCategory(sample);
+			this.kickField(sample, category);
 		}
 
-		const hash = fnv1a32(sampledBytes);
-		const kind = this.sniffEventKind(sampledBytes);
-		this.createBurst(nowMs, payloadSize, hash, kind);
+		this.recordTraffic(performance.now(), bytes, category);
 	}
 
-	drawAurora(timestampMs, width, height, intensity) {
+	applySettingsInfluence(settings) {
+		const colorHue = rgbToHue(hexToRgb(settings.CONNECTION_COLOR));
+		this.baseHueTarget = colorHue;
+
+		const countNorm = clamp((settings.PARTICLE_COUNT - 50) / (15000 - 50), 0, 1);
+		const radiusNorm = clamp((settings.INTERACTION_RADIUS - 10) / (300 - 10), 0, 1);
+		const opacityNorm = clamp(settings.CONNECTION_OPACITY / 0.5, 0, 1);
+
+		const coupling =
+			this.gain *
+			(0.42 + countNorm * 0.18 + radiusNorm * 0.22 + opacityNorm * 0.18);
+
+		const rateNorm = clamp(this.eventRate / 260, 0, 1.3);
+		const byteNorm = clamp(this.byteRate / 3_200_000, 0, 1.2);
+		const targetEnergy = clamp(rateNorm * 0.75 + byteNorm * 0.65 + this.pulse, 0, 2.2);
+
+		this.energy = lerp(this.energy, targetEnergy * coupling, 0.09);
+		this.pulse = Math.max(0, this.pulse - 0.024);
+		this.shear = Math.max(0, this.shear - 0.017);
+		this.baseHue = lerp(this.baseHue, this.baseHueTarget, 0.05);
+
+		const speedTarget = clamp(0.08 + rateNorm * 0.9 + byteNorm * 0.6 + this.shear, 0.08, 1.9);
+		this.windSpeedTarget = speedTarget * (0.7 + coupling * 0.5);
+
+		let angleDiff = this.windAngleTarget - this.windAngle;
+		if (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+		if (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+		this.windAngle += angleDiff * 0.03;
+		this.windSpeed = lerp(this.windSpeed, this.windSpeedTarget, 0.06);
+	}
+
+	drawAtmosphere(width, height, intensity, driftX, driftY, hueShift) {
 		const ctx = this.ctx;
-		const driftX = this.wind.x * width * 0.15;
-		const phase = timestampMs * 0.00008;
-		const hueA = (this.hue + Math.sin(phase * 8) * 24 + 360) % 360;
-		const hueB = (this.hue + 80 + Math.cos(phase * 5.5) * 28 + 360) % 360;
-		const hueC = (this.hue + 200 + Math.sin(phase * 4) * 16 + 360) % 360;
+		const warm = wrapHue(this.baseHue + hueShift + 24);
+		const cool = wrapHue(this.baseHue + hueShift - 68);
+		const spectral = wrapHue(this.baseHue + hueShift + 148);
 
 		ctx.globalCompositeOperation = "screen";
 
-		const gradA = ctx.createLinearGradient(
-			-driftX,
-			height * (0.35 + this.wind.y * 0.08),
-			width + driftX,
-			height * (0.75 - this.wind.y * 0.08),
+		const wash = ctx.createLinearGradient(
+			width * (0.1 - driftX * 0.12),
+			height * (0.2 - driftY * 0.08),
+			width * (0.9 + driftX * 0.15),
+			height * (0.8 + driftY * 0.11),
 		);
-		gradA.addColorStop(0, `hsla(${hueA}, 95%, 55%, ${0.04 + intensity * 0.16})`);
-		gradA.addColorStop(0.5, `hsla(${hueB}, 88%, 64%, ${0.02 + intensity * 0.12})`);
-		gradA.addColorStop(1, `hsla(${hueC}, 95%, 60%, ${0.03 + intensity * 0.14})`);
-		ctx.fillStyle = gradA;
+		wash.addColorStop(0, `hsla(${cool}, 94%, 57%, ${0.02 + intensity * 0.08})`);
+		wash.addColorStop(0.5, `hsla(${warm}, 90%, 63%, ${0.03 + intensity * 0.1})`);
+		wash.addColorStop(1, `hsla(${spectral}, 94%, 60%, ${0.02 + intensity * 0.08})`);
+		ctx.fillStyle = wash;
 		ctx.fillRect(0, 0, width, height);
 
-		const centerX = width * (0.5 + this.wind.x * 0.1);
-		const centerY = height * (0.5 + this.wind.y * 0.1);
 		const radial = ctx.createRadialGradient(
-			centerX,
-			centerY,
-			Math.min(width, height) * 0.08,
-			centerX,
-			centerY,
-			Math.max(width, height) * (0.45 + intensity * 0.2),
+			width * (0.5 + driftX * 0.1),
+			height * (0.52 + driftY * 0.08),
+			Math.min(width, height) * 0.12,
+			width * (0.5 + driftX * 0.16),
+			height * (0.52 + driftY * 0.12),
+			Math.max(width, height) * (0.44 + intensity * 0.2),
 		);
-		radial.addColorStop(0, `hsla(${(hueA + 45) % 360}, 95%, 62%, ${0.08 + intensity * 0.14})`);
-		radial.addColorStop(0.35, `hsla(${(hueB + 20) % 360}, 96%, 58%, ${0.05 + intensity * 0.1})`);
+		radial.addColorStop(0, `hsla(${warm}, 96%, 70%, ${0.04 + intensity * 0.12})`);
+		radial.addColorStop(0.4, `hsla(${spectral}, 90%, 66%, ${0.02 + intensity * 0.09})`);
 		radial.addColorStop(1, "hsla(0, 0%, 0%, 0)");
 		ctx.fillStyle = radial;
 		ctx.fillRect(0, 0, width, height);
 	}
 
-	drawBursts(dt, intensity) {
+	drawIsobars(width, height, intensity, settings) {
 		const ctx = this.ctx;
+		const radiusNorm = clamp((settings.INTERACTION_RADIUS - 10) / (300 - 10), 0, 1);
+		const opacityNorm = clamp(settings.CONNECTION_OPACITY / 0.5, 0, 1);
+		const lineCount = Math.round(6 + radiusNorm * 10 + opacityNorm * 8);
+		const segments = 30;
 
-		for (let i = this.bursts.length - 1; i >= 0; i -= 1) {
-			const burst = this.bursts[i];
-			burst.life -= dt * (0.55 + intensity * 0.5);
-			burst.radius += dt * (80 + intensity * 320);
-			if (burst.life <= 0 || burst.radius >= burst.maxRadius) {
-				this.bursts.splice(i, 1);
-				continue;
-			}
-
-			const inner = Math.max(1, burst.radius * 0.12);
-			const gradient = ctx.createRadialGradient(
-				burst.x,
-				burst.y,
-				inner,
-				burst.x,
-				burst.y,
-				burst.radius,
-			);
-			gradient.addColorStop(0, `hsla(${burst.hue}, 98%, 74%, ${burst.life * 0.22 * intensity})`);
-			gradient.addColorStop(0.45, `hsla(${(burst.hue + 26) % 360}, 96%, 62%, ${burst.life * 0.16 * intensity})`);
-			gradient.addColorStop(1, "hsla(0, 0%, 0%, 0)");
-			ctx.fillStyle = gradient;
-			ctx.beginPath();
-			ctx.arc(burst.x, burst.y, burst.radius, 0, Math.PI * 2);
-			ctx.fill();
-		}
-	}
-
-	drawTrails(dt, intensity) {
-		const ctx = this.ctx;
-		const windPushX = this.wind.x * (70 + intensity * 260) * this.gain;
-		const windPushY = this.wind.y * (70 + intensity * 260) * this.gain;
+		const mixTilt = this.mixCreate * 0.8 - this.mixDelete * 0.9 + this.mixUpdate * 0.25;
+		const bandAlpha = (0.01 + intensity * 0.09) * (0.55 + opacityNorm * 0.9);
+		const amplitude = height * (0.012 + intensity * 0.04 + radiusNorm * 0.02);
 
 		ctx.globalCompositeOperation = "lighter";
-		for (let i = this.trails.length - 1; i >= 0; i -= 1) {
-			const trail = this.trails[i];
-			trail.life -= dt * trail.decay;
-			if (trail.life <= 0) {
-				this.trails.splice(i, 1);
-				continue;
+		for (let i = 0; i < lineCount; i += 1) {
+			const t = lineCount <= 1 ? 0 : i / (lineCount - 1);
+			const y0 = height * (0.1 + t * 0.8);
+			const freq = 1.2 + (i % 4) * 0.38 + intensity * 0.9;
+			const phase = this.phase * (0.8 + this.windSpeed * 0.35) + i * 0.55;
+			const hue = wrapHue(
+				this.baseHue +
+					mixTilt * 70 +
+					Math.sin(this.phase * 0.2 + i * 0.33) * 22,
+			);
+
+			ctx.beginPath();
+			for (let s = 0; s <= segments; s += 1) {
+				const u = s / segments;
+				const x = u * width;
+				const waveA = Math.sin((u * Math.PI * 2 * freq) + phase);
+				const waveB = Math.cos((u * Math.PI * 2 * (freq * 0.62)) - phase * 1.7);
+				const y = y0 + waveA * amplitude + waveB * amplitude * 0.45;
+				if (s === 0) ctx.moveTo(x, y);
+				else ctx.lineTo(x, y);
 			}
 
-			trail.px = trail.x;
-			trail.py = trail.y;
-			trail.vx = lerp(trail.vx, trail.vx + windPushX, 0.02);
-			trail.vy = lerp(trail.vy, trail.vy + windPushY, 0.02);
-			trail.x += trail.vx * dt;
-			trail.y += trail.vy * dt;
-
-			ctx.strokeStyle = `hsla(${trail.hue}, 95%, 68%, ${trail.life * 0.24 * intensity})`;
-			ctx.lineWidth = trail.width;
-			ctx.beginPath();
-			ctx.moveTo(trail.px, trail.py);
-			ctx.lineTo(trail.x, trail.y);
+			ctx.strokeStyle = `hsla(${hue}, 88%, 68%, ${bandAlpha * (0.7 + (1 - Math.abs(t - 0.5)) * 0.6)})`;
+			ctx.lineWidth = 0.8 + smoothstep(0, 1, intensity) * 2.2;
 			ctx.stroke();
 		}
 	}
 
-	drawDust(timestampMs, width, height, intensity) {
+	drawShearBands(width, height, intensity) {
 		const ctx = this.ctx;
-		const fleckCount = Math.floor(6 + intensity * 20);
+		if (intensity < 0.04) return;
+
+		const bandCount = Math.round(2 + intensity * 4);
+		const drift = this.phase * (16 + this.windSpeed * 55);
+		const metaBias = this.mixMeta * 0.4 + this.mixUpdate * 0.25;
 		ctx.globalCompositeOperation = "screen";
 
-		for (let i = 0; i < fleckCount; i += 1) {
-			const seed = ((timestampMs | 0) + i * 977 + this.messageCount * 37) >>> 0;
-			const x = pseudoRandom(seed ^ 0x8f1bbcdc) * width;
-			const y = pseudoRandom(seed ^ 0x14f02d4e) * height;
-			const hue = (this.hue + pseudoRandom(seed ^ 0xb5297a4d) * 120) % 360;
-			const size = 0.7 + pseudoRandom(seed ^ 0x68e31da4) * 2.8;
-			ctx.fillStyle = `hsla(${hue}, 88%, 72%, ${0.03 + intensity * 0.09})`;
-			ctx.fillRect(x, y, size, size);
+		for (let i = 0; i < bandCount; i += 1) {
+			const widthRatio = 0.12 + (i % 3) * 0.07 + metaBias * 0.08;
+			const bandWidth = width * widthRatio;
+			const x = ((drift * (0.45 + i * 0.16)) + i * width * 0.23) % (width + bandWidth) - bandWidth;
+			const yOffset = Math.sin(this.phase * 0.6 + i * 0.9) * height * 0.08;
+			const y = height * (0.1 + ((i * 0.28) % 0.7)) + yOffset;
+			const grad = ctx.createLinearGradient(x, y, x + bandWidth, y + height * 0.16);
+			const hue = wrapHue(this.baseHue - 30 + i * 36 + this.mixDelete * 40);
+			grad.addColorStop(0, `hsla(${hue}, 95%, 58%, 0)`);
+			grad.addColorStop(0.5, `hsla(${hue}, 90%, 64%, ${0.02 + intensity * 0.08})`);
+			grad.addColorStop(1, `hsla(${hue}, 95%, 58%, 0)`);
+
+			ctx.fillStyle = grad;
+			ctx.fillRect(x, y - height * 0.12, bandWidth, height * 0.26);
 		}
 	}
 
 	draw(timestampMs, settings) {
-		if (!this.enabled) {
-			return;
-		}
+		if (!this.enabled) return;
 
 		const { width, height } = this.getViewport();
-		if (!width || !height) {
-			return;
-		}
+		if (!width || !height) return;
 
-		const dt = this.lastFrameMs ? Math.min((timestampMs - this.lastFrameMs) / 1000, 0.05) : 1 / 60;
+		const dt = this.lastFrameMs
+			? Math.min((timestampMs - this.lastFrameMs) / 1000, 0.05)
+			: 1 / 60;
 		this.lastFrameMs = timestampMs;
 
-		const configuredGain = settings && Number.isFinite(settings.FIREHOSE_ENTROPY_GAIN)
-			? settings.FIREHOSE_ENTROPY_GAIN
-			: this.gain;
-		this.setGain(configuredGain);
-
+		this.setGain(settings.FIREHOSE_ENTROPY_GAIN);
 		this.updateRates(timestampMs);
+		this.applySettingsInfluence(settings);
 
-		const activityN = clamp(this.activity / 220, 0, 1);
-		const bandwidthN = clamp(this.bandwidth / 2_800_000, 0, 1);
-		const targetEnergy = clamp(activityN * 0.8 + bandwidthN * 0.65 + this.pulseEnergy, 0, 1.7);
+		const intensity = clamp(this.energy, 0, 1.8);
+		if (intensity < 0.012 && this.eventRate < 0.5) return;
 
-		this.energy = lerp(this.energy, targetEnergy, 0.1);
-		this.pulseEnergy = Math.max(0, this.pulseEnergy - dt * 0.28);
-		this.hue = lerp(this.hue, this.hueTarget, 0.03);
-		this.wind.x = lerp(this.wind.x, this.windTarget.x, 0.04);
-		this.wind.y = lerp(this.wind.y, this.windTarget.y, 0.04);
-
-		const intensity = clamp(this.energy * this.gain, 0, 1.8);
-		if (intensity < 0.015 && this.bursts.length === 0 && this.trails.length === 0) {
-			return;
-		}
+		this.phase += dt * (0.7 + this.windSpeed * 0.9);
+		const driftX = Math.cos(this.windAngle) * this.windSpeed;
+		const driftY = Math.sin(this.windAngle) * this.windSpeed;
+		const hueShift = this.mixCreate * 52 - this.mixDelete * 67 + this.mixUpdate * 24;
 
 		this.ctx.save();
-		this.drawAurora(timestampMs, width, height, intensity);
-		this.drawBursts(dt, intensity);
-		this.drawTrails(dt, intensity);
-		this.drawDust(timestampMs, width, height, intensity);
+		this.drawAtmosphere(width, height, intensity, driftX, driftY, hueShift);
+		this.drawIsobars(width, height, intensity, settings);
+		this.drawShearBands(width, height, intensity);
 		this.ctx.restore();
 	}
 
 	destroy() {
 		this.enabled = false;
 		this.disconnect();
-		this.resetVisualState();
+		this.resetState();
 	}
 }
