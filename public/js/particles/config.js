@@ -17,7 +17,7 @@ export const RANGES = {
 	PARTICLE_COLOR: { default: "#64ffda" },
 	ENABLE_VORTEX_FORCE: { default: false },
 	FIREHOSE_ENTROPY: { default: false },
-	FIREHOSE_ENTROPY_GAIN: { min: 0.2, max: 1.5, step: 0.1, default: 0.8 },
+	FIREHOSE_ENTROPY_GAIN: { min: 0.2, max: 2, step: 0.1, default: 0.9 },
 };
 
 // Generate default settings object from the RANGES
