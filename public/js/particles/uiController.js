@@ -330,15 +330,15 @@ export class UIController {
 			'particles': ['PARTICLE_COUNT', 'GRAVITY', 'AVERAGE_PARTICLE_SIZE', 'DRAG', 'ELASTICITY'],
 			'connections': ['INTERACTION_RADIUS', 'CONNECTION_OPACITY', 'CONNECTION_WIDTH', 'CONNECTION_COLOR'],
 			'forces': ['EXPLOSION_RADIUS', 'EXPLOSION_FORCE', 'ATTRACT', 'SMOOTHING_FACTOR', 'ENABLE_VORTEX_FORCE'],
-			'entropy': ['FIREHOSE_ENTROPY', 'FIREHOSE_ENTROPY_GAIN']
+			'firehose': ['FIREHOSE_ENTROPY', 'FIREHOSE_ENTROPY_GAIN']
 		};
 
 		const checkboxLabels = {
 			ENABLE_VORTEX_FORCE: "special mouse force",
-			FIREHOSE_ENTROPY: "zlay relay weather",
+			FIREHOSE_ENTROPY: "zlay firehose weather",
 		};
 		const labelOverrides = {
-			FIREHOSE_ENTROPY_GAIN: "relay coupling",
+			FIREHOSE_ENTROPY_GAIN: "storm intensity",
 		};
 		
 		for (const [category, keys] of Object.entries(categories)) {
