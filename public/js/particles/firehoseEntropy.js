@@ -1,16 +1,5 @@
 const ZLAY_FIREHOSE_URL = "wss://zlay.waow.tech/xrpc/com.atproto.sync.subscribeRepos";
 
-const COLLECTION_HUE_BIAS = {
-	post: 14,
-	like: -18,
-	repost: 22,
-	follow: 34,
-	profile: -8,
-	other: 0,
-};
-
-const COLLECTION_KEYS = ["post", "like", "repost", "follow", "profile", "other"];
-
 function clamp(value, min, max) {
 	return Math.max(min, Math.min(max, value));
 }
@@ -19,8 +8,8 @@ function lerp(a, b, t) {
 	return a + (b - a) * t;
 }
 
-function wrapHue(hue) {
-	return ((hue % 360) + 360) % 360;
+function wrapHue(h) {
+	return ((h % 360) + 360) % 360;
 }
 
 function hexToRgb(hex) {
@@ -51,14 +40,24 @@ function rgbToHue(rgb) {
 	return wrapHue(hue * 60);
 }
 
-function hashBytes(bytes) {
+function shortHash(bytes) {
 	let hash = 2166136261;
-	for (let i = 0; i < bytes.length; i += 12) {
+	for (let i = 0; i < bytes.length; i += 8) {
 		hash ^= bytes[i];
 		hash = Math.imul(hash, 16777619);
 	}
 	return hash >>> 0;
 }
+
+const COLLECTION_KEYS = ["post", "like", "repost", "follow", "profile", "other"];
+const COLLECTION_HUE_OFFSETS = {
+	post: 18,
+	like: 305,
+	repost: 42,
+	follow: 132,
+	profile: 195,
+	other: 255,
+};
 
 export class FirehoseEntropy {
 	constructor(ctx, getViewport) {
@@ -66,14 +65,14 @@ export class FirehoseEntropy {
 		this.getViewport = getViewport;
 
 		this.enabled = false;
-		this.gain = 0.9;
+		this.gain = 1.3;
 
 		this.ws = null;
 		this.reconnectTimer = null;
 		this.reconnectDelayMs = 1000;
 
 		this.decoder = new TextDecoder();
-		this.sampleStride = 12;
+		this.sampleStride = 8;
 		this.messageCount = 0;
 
 		this.buckets = [];
@@ -83,61 +82,35 @@ export class FirehoseEntropy {
 		this.opsMix = { create: 0, update: 0, delete: 0, meta: 0 };
 		this.collectionMix = { post: 0, like: 0, repost: 0, follow: 0, profile: 0, other: 0 };
 
+		this.energy = 0;
+		this.pulse = 0;
+		this.shear = 0;
+
 		this.baseHue = 190;
 		this.baseHueTarget = 190;
-		this.intensity = 0;
-		this.impulse = 0;
+
 		this.windAngle = 0;
 		this.windAngleTarget = 0;
 		this.windSpeed = 0;
 		this.windSpeedTarget = 0;
+
 		this.phase = 0;
 		this.lastFrameMs = 0;
-
-		this.cells = [];
-		this.initCells();
-	}
-
-	initCells() {
-		const { width, height } = this.getViewport();
-		const w = Math.max(1, width || 1920);
-		const h = Math.max(1, height || 1080);
-
-		if (this.cells.length === 0) {
-			for (let i = 0; i < 7; i += 1) {
-				const t = (i + 0.5) / 7;
-				this.cells.push({
-					x: w * (0.15 + t * 0.7),
-					y: h * (0.2 + ((i * 0.137) % 0.6)),
-					vx: 0,
-					vy: 0,
-					radius: Math.min(w, h) * (0.18 + (i % 3) * 0.06),
-					weight: 0.75 + (i % 4) * 0.15,
-					hueBias: 0,
-				});
-			}
-			return;
-		}
-
-		for (const cell of this.cells) {
-			cell.x = clamp(cell.x, 0, w);
-			cell.y = clamp(cell.y, 0, h);
-		}
+		this.statsText = "";
 	}
 
 	setEnabled(enabled) {
 		if (enabled === this.enabled) return;
 		this.enabled = enabled;
-		if (this.enabled) {
-			this.connect();
-		} else {
+		if (this.enabled) this.connect();
+		else {
 			this.disconnect();
 			this.resetState();
 		}
 	}
 
 	setGain(gain) {
-		this.gain = clamp(Number.isFinite(gain) ? gain : 0.9, 0.2, 2);
+		this.gain = clamp(Number.isFinite(gain) ? gain : 1.3, 0.2, 3);
 	}
 
 	connect() {
@@ -150,8 +123,8 @@ export class FirehoseEntropy {
 			this.reconnectDelayMs = 1000;
 		};
 
-		ws.onmessage = (event) => {
-			void this.handleMessage(event.data);
+		ws.onmessage = (evt) => {
+			void this.handleMessage(evt.data);
 		};
 
 		ws.onclose = () => {
@@ -190,17 +163,12 @@ export class FirehoseEntropy {
 		this.buckets.length = 0;
 		this.eventRate = 0;
 		this.byteRate = 0;
-		this.opsMix = { create: 0, update: 0, delete: 0, meta: 0 };
-		this.collectionMix = { post: 0, like: 0, repost: 0, follow: 0, profile: 0, other: 0 };
-		this.intensity = 0;
-		this.impulse = 0;
+		this.energy = 0;
+		this.pulse = 0;
+		this.shear = 0;
 		this.windSpeed = 0;
 		this.windSpeedTarget = 0;
-		for (const cell of this.cells) {
-			cell.vx = 0;
-			cell.vy = 0;
-			cell.hueBias = 0;
-		}
+		this.statsText = "";
 	}
 
 	decodeOperation(text) {
@@ -281,32 +249,39 @@ export class FirehoseEntropy {
 			meta: ops.meta / opsTotal,
 		};
 
-		const collectionsTotal = Math.max(1, COLLECTION_KEYS.reduce((sum, key) => sum + collections[key], 0));
+		const collectionTotal = Math.max(1, COLLECTION_KEYS.reduce((sum, key) => sum + collections[key], 0));
 		this.collectionMix = {
-			post: collections.post / collectionsTotal,
-			like: collections.like / collectionsTotal,
-			repost: collections.repost / collectionsTotal,
-			follow: collections.follow / collectionsTotal,
-			profile: collections.profile / collectionsTotal,
-			other: collections.other / collectionsTotal,
+			post: collections.post / collectionTotal,
+			like: collections.like / collectionTotal,
+			repost: collections.repost / collectionTotal,
+			follow: collections.follow / collectionTotal,
+			profile: collections.profile / collectionTotal,
+			other: collections.other / collectionTotal,
 		};
+
+		let dominant = "other";
+		let dominantScore = this.collectionMix.other;
+		for (const key of COLLECTION_KEYS) {
+			if (this.collectionMix[key] > dominantScore) {
+				dominant = key;
+				dominantScore = this.collectionMix[key];
+			}
+		}
+
+		this.statsText = `${Math.round(this.eventRate)} ev/s · ${dominant}`;
 	}
 
-	applyEventImpulse(hash, op, collection) {
-		if (!this.cells.length) return;
-		const index = hash % this.cells.length;
-		const cell = this.cells[index];
-		const angle = ((hash >>> 6) / 67108864) * Math.PI * 2;
-		const opForce = op === "create" ? 0.65 : op === "update" ? 0.4 : op === "delete" ? 0.9 : 0.25;
-		const collectionForce = collection === "post" ? 0.6 : collection === "repost" ? 0.7 : collection === "follow" ? 0.75 : 0.45;
-		const force = opForce + collectionForce;
-
-		cell.vx += Math.cos(angle) * force;
-		cell.vy += Math.sin(angle) * force;
-		cell.hueBias = lerp(cell.hueBias, COLLECTION_HUE_BIAS[collection] || 0, 0.35);
-
+	kickField(sample, op, collection) {
+		const hash = shortHash(sample);
+		const angle = (hash / 4294967295) * Math.PI * 2;
 		this.windAngleTarget = angle;
-		this.impulse = clamp(this.impulse + force * 0.2, 0, 2.6);
+
+		const opBoost = op === "create" ? 0.38 : op === "delete" ? 0.45 : op === "update" ? 0.25 : 0.18;
+		const collectionBoost = collection === "post" ? 0.24 : collection === "like" ? 0.21 : collection === "repost" ? 0.29 : collection === "follow" ? 0.34 : 0.16;
+		this.pulse = clamp(this.pulse + opBoost + collectionBoost, 0, 2.2);
+
+		const heavyPayloadBoost = sample.length > 2500 ? 0.24 : 0.12;
+		this.shear = clamp(this.shear + heavyPayloadBoost, 0, 1.8);
 	}
 
 	async handleMessage(rawData) {
@@ -318,134 +293,212 @@ export class FirehoseEntropy {
 
 		if (rawData instanceof ArrayBuffer) {
 			bytes = rawData.byteLength;
-			if (this.messageCount % this.sampleStride === 0) sample = new Uint8Array(rawData);
+			if (this.messageCount % this.sampleStride === 0) {
+				sample = new Uint8Array(rawData);
+			}
 		} else if (rawData instanceof Blob) {
 			bytes = rawData.size;
 			if (this.messageCount % this.sampleStride === 0) {
-				const arrayBuffer = await rawData.arrayBuffer();
-				sample = new Uint8Array(arrayBuffer);
+				const ab = await rawData.arrayBuffer();
+				sample = new Uint8Array(ab);
 			}
 		}
 
 		let op = "meta";
 		let collection = "other";
 		if (sample && sample.length > 0) {
-			const text = this.decoder.decode(sample.subarray(0, Math.min(sample.length, 680)));
+			const text = this.decoder.decode(sample.subarray(0, Math.min(sample.length, 720)));
 			op = this.decodeOperation(text);
 			collection = this.decodeCollection(text);
-			this.applyEventImpulse(hashBytes(sample), op, collection);
+			this.kickField(sample, op, collection);
 		}
 
 		this.recordTraffic(performance.now(), bytes, op, collection);
 	}
 
-	collectionHueShift() {
-		let shift = 0;
+	computePalette(baseHue) {
+		let x = 0;
+		let y = 0;
 		for (const key of COLLECTION_KEYS) {
-			shift += (this.collectionMix[key] || 0) * (COLLECTION_HUE_BIAS[key] || 0);
+			const weight = this.collectionMix[key] || 0;
+			if (weight <= 0) continue;
+			const hue = wrapHue(baseHue + COLLECTION_HUE_OFFSETS[key]);
+			const radians = (hue * Math.PI) / 180;
+			x += Math.cos(radians) * weight;
+			y += Math.sin(radians) * weight;
 		}
-		return shift;
+
+		if (Math.abs(x) < 1e-6 && Math.abs(y) < 1e-6) {
+			return {
+				lead: wrapHue(baseHue + 25),
+				accent: wrapHue(baseHue + 150),
+				shadow: wrapHue(baseHue - 70),
+			};
+		}
+
+		const lead = wrapHue((Math.atan2(y, x) * 180) / Math.PI);
+		return {
+			lead,
+			accent: wrapHue(lead + 120),
+			shadow: wrapHue(lead - 85),
+		};
 	}
 
 	applySettingsInfluence(settings) {
-		this.baseHueTarget = rgbToHue(hexToRgb(settings.CONNECTION_COLOR));
+		const colorHue = rgbToHue(hexToRgb(settings.CONNECTION_COLOR));
+		this.baseHueTarget = colorHue;
 		this.baseHue = lerp(this.baseHue, this.baseHueTarget, 0.08);
 
 		const countNorm = clamp((settings.PARTICLE_COUNT - 50) / (15000 - 50), 0, 1);
 		const radiusNorm = clamp((settings.INTERACTION_RADIUS - 10) / (300 - 10), 0, 1);
 		const opacityNorm = clamp(settings.CONNECTION_OPACITY / 0.5, 0, 1);
 
-		const rateNorm = clamp(this.eventRate / 180, 0, 2.2);
-		const bytesNorm = clamp(this.byteRate / 2_100_000, 0, 2.2);
-		const settingsCoupling = 0.42 + countNorm * 0.2 + radiusNorm * 0.18 + opacityNorm * 0.2;
-		const target = (rateNorm * 0.55 + bytesNorm * 0.7 + this.impulse * 0.5) * this.gain * settingsCoupling;
+		const rateNorm = clamp(this.eventRate / 180, 0, 2);
+		const bytesNorm = clamp(this.byteRate / 2_200_000, 0, 2);
+		const settingsCoupling = 0.55 + countNorm * 0.15 + radiusNorm * 0.15 + opacityNorm * 0.15;
+		const targetEnergy = (rateNorm * 0.8 + bytesNorm * 0.85 + this.pulse) * settingsCoupling * this.gain;
 
-		this.intensity = lerp(this.intensity, clamp(target, 0, 2.1), 0.1);
-		this.impulse = Math.max(0, this.impulse - 0.035);
+		this.energy = lerp(this.energy, clamp(targetEnergy, 0, 3), 0.14);
+		this.pulse = Math.max(0, this.pulse - 0.04);
+		this.shear = Math.max(0, this.shear - 0.025);
 
-		const windTarget = clamp(0.2 + rateNorm * 0.4 + bytesNorm * 0.45 + this.opsMix.delete * 0.45, 0.2, 2.8);
-		this.windSpeedTarget = windTarget;
+		const targetSpeed = clamp(0.2 + rateNorm * 0.6 + bytesNorm * 0.5 + this.shear, 0.2, 3.2);
+		this.windSpeedTarget = targetSpeed;
 
-		let delta = this.windAngleTarget - this.windAngle;
-		if (delta > Math.PI) delta -= Math.PI * 2;
-		if (delta < -Math.PI) delta += Math.PI * 2;
-		this.windAngle += delta * 0.04;
+		let angleDelta = this.windAngleTarget - this.windAngle;
+		if (angleDelta > Math.PI) angleDelta -= Math.PI * 2;
+		if (angleDelta < -Math.PI) angleDelta += Math.PI * 2;
+		this.windAngle += angleDelta * 0.05;
 		this.windSpeed = lerp(this.windSpeed, this.windSpeedTarget, 0.08);
 	}
 
-	stepCells(dt, width, height) {
-		const windX = Math.cos(this.windAngle) * this.windSpeed;
-		const windY = Math.sin(this.windAngle) * this.windSpeed;
-		const scale = dt * 60;
-
-		for (const cell of this.cells) {
-			cell.vx += windX * (0.012 + cell.weight * 0.004);
-			cell.vy += windY * (0.012 + cell.weight * 0.004);
-			cell.vx *= 0.985;
-			cell.vy *= 0.985;
-			cell.x += cell.vx * scale;
-			cell.y += cell.vy * scale;
-
-			const margin = cell.radius * 0.45;
-			if (cell.x < -margin) cell.x = width + margin;
-			if (cell.x > width + margin) cell.x = -margin;
-			if (cell.y < -margin) cell.y = height + margin;
-			if (cell.y > height + margin) cell.y = -margin;
-		}
-	}
-
-	drawAmbient(width, height, intensity, leadHue, accentHue) {
+	drawAtmosphere(width, height, intensity, palette, driftX, driftY) {
 		const ctx = this.ctx;
-		ctx.globalCompositeOperation = "soft-light";
+		ctx.globalCompositeOperation = "screen";
 
-		const grad = ctx.createLinearGradient(0, 0, width, height);
-		grad.addColorStop(0, `hsla(${leadHue}, 58%, 48%, ${0.04 + intensity * 0.07})`);
-		grad.addColorStop(0.5, `hsla(${accentHue}, 50%, 42%, ${0.03 + intensity * 0.06})`);
-		grad.addColorStop(1, `hsla(${wrapHue(leadHue - 24)}, 46%, 38%, ${0.03 + intensity * 0.05})`);
-		ctx.fillStyle = grad;
+		const wash = ctx.createLinearGradient(
+			width * (0.08 - driftX * 0.07),
+			height * (0.1 - driftY * 0.05),
+			width * (0.92 + driftX * 0.12),
+			height * (0.9 + driftY * 0.08),
+		);
+		wash.addColorStop(0, `hsla(${palette.shadow}, 95%, 54%, ${0.06 + intensity * 0.16})`);
+		wash.addColorStop(0.45, `hsla(${palette.lead}, 92%, 62%, ${0.08 + intensity * 0.2})`);
+		wash.addColorStop(1, `hsla(${palette.accent}, 95%, 60%, ${0.06 + intensity * 0.17})`);
+		ctx.fillStyle = wash;
+		ctx.fillRect(0, 0, width, height);
+
+		const glow = ctx.createRadialGradient(
+			width * (0.5 + driftX * 0.08),
+			height * (0.5 + driftY * 0.08),
+			Math.min(width, height) * 0.1,
+			width * (0.5 + driftX * 0.12),
+			height * (0.5 + driftY * 0.12),
+			Math.max(width, height) * (0.52 + intensity * 0.24),
+		);
+		glow.addColorStop(0, `hsla(${palette.lead}, 98%, 70%, ${0.09 + intensity * 0.14})`);
+		glow.addColorStop(0.4, `hsla(${palette.accent}, 95%, 66%, ${0.05 + intensity * 0.1})`);
+		glow.addColorStop(1, "hsla(0, 0%, 0%, 0)");
+		ctx.fillStyle = glow;
 		ctx.fillRect(0, 0, width, height);
 	}
 
-	drawCellMists(width, height, intensity, leadHue, accentHue) {
+	drawRibbons(width, height, intensity, palette, driftX, driftY) {
 		const ctx = this.ctx;
-		ctx.globalCompositeOperation = "screen";
+		const count = Math.round(3 + intensity * 4);
+		const speed = this.windSpeed;
+		ctx.globalCompositeOperation = "lighter";
 
-		for (let i = 0; i < this.cells.length; i += 1) {
-			const cell = this.cells[i];
-			const hue = wrapHue(lerp(leadHue, accentHue, i / (this.cells.length - 1 || 1)) + cell.hueBias * 0.45);
-			const radius = cell.radius * (0.88 + intensity * 0.36 + cell.weight * 0.08);
-			const alpha = (0.014 + intensity * 0.055) * (0.75 + cell.weight * 0.22);
+		for (let i = 0; i < count; i += 1) {
+			const lane = (i + 1) / (count + 1);
+			const yBase =
+				height * lane +
+				Math.sin(this.phase * 0.8 + i * 0.9) * height * 0.08 +
+				driftY * height * 0.14;
 
-			const gradient = ctx.createRadialGradient(cell.x, cell.y, radius * 0.2, cell.x, cell.y, radius);
-			gradient.addColorStop(0, `hsla(${hue}, 78%, 64%, ${alpha})`);
-			gradient.addColorStop(0.45, `hsla(${wrapHue(hue + 10)}, 72%, 58%, ${alpha * 0.45})`);
-			gradient.addColorStop(1, "hsla(0, 0%, 0%, 0)");
+			const xStart = -width * 0.2 + Math.sin(this.phase * 0.3 + i) * width * 0.08;
+			const xEnd = width * 1.2 + Math.cos(this.phase * 0.25 + i * 0.7) * width * 0.08;
+			const yLift = (Math.cos(this.phase * 0.6 + i * 1.2) + driftX * 1.3) * height * 0.11;
 
-			ctx.fillStyle = gradient;
-			ctx.fillRect(cell.x - radius, cell.y - radius, radius * 2, radius * 2);
+			const cp1x = width * (0.24 + speed * 0.03);
+			const cp2x = width * (0.76 - speed * 0.02);
+			const cp1y = yBase - yLift;
+			const cp2y = yBase + yLift;
+
+			const grad = ctx.createLinearGradient(0, yBase - yLift, width, yBase + yLift);
+			const hueA = wrapHue(palette.shadow + i * 9);
+			const hueB = wrapHue(palette.lead + i * 6);
+			const hueC = wrapHue(palette.accent - i * 10);
+			grad.addColorStop(0, `hsla(${hueA}, 95%, 60%, 0)`);
+			grad.addColorStop(0.2, `hsla(${hueA}, 95%, 60%, ${0.1 + intensity * 0.14})`);
+			grad.addColorStop(0.55, `hsla(${hueB}, 94%, 66%, ${0.14 + intensity * 0.18})`);
+			grad.addColorStop(0.85, `hsla(${hueC}, 95%, 64%, ${0.1 + intensity * 0.14})`);
+			grad.addColorStop(1, `hsla(${hueC}, 95%, 64%, 0)`);
+
+			ctx.strokeStyle = grad;
+			ctx.lineWidth = 8 + intensity * 20 + (1 - Math.abs(lane - 0.5)) * 8;
+			ctx.lineCap = "round";
+			ctx.beginPath();
+			ctx.moveTo(xStart, yBase);
+			ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, xEnd, yBase);
+			ctx.stroke();
 		}
 	}
 
-	drawFilaments(intensity, hue) {
-		if (this.cells.length < 3) return;
+	drawContours(width, height, intensity, palette) {
 		const ctx = this.ctx;
-		const cellsByX = [...this.cells].sort((a, b) => a.x - b.x);
+		const count = Math.round(7 + intensity * 8);
+		const segments = 28;
+		const amplitude = height * (0.012 + intensity * 0.04);
+
 		ctx.globalCompositeOperation = "screen";
-		ctx.strokeStyle = `hsla(${hue}, 78%, 72%, ${0.015 + intensity * 0.055})`;
-		ctx.lineWidth = 0.7 + intensity * 0.9;
-		ctx.lineCap = "round";
-		ctx.beginPath();
-		ctx.moveTo(cellsByX[0].x, cellsByX[0].y);
-		for (let i = 1; i < cellsByX.length; i += 1) {
-			const prev = cellsByX[i - 1];
-			const curr = cellsByX[i];
-			const midX = (prev.x + curr.x) * 0.5;
-			const midY = (prev.y + curr.y) * 0.5 + Math.sin(this.phase + i) * (8 + intensity * 18);
-			ctx.quadraticCurveTo(prev.x, prev.y, midX, midY);
+		for (let i = 0; i < count; i += 1) {
+			const t = count <= 1 ? 0.5 : i / (count - 1);
+			const yBase = height * (0.06 + t * 0.88);
+			const freq = 1.3 + (i % 5) * 0.32 + intensity * 0.7;
+			const phase = this.phase * (0.55 + this.windSpeed * 0.18) + i * 0.6;
+			const hue = wrapHue(palette.lead + Math.sin(phase * 0.6) * 24 + i * 3);
+
+			ctx.beginPath();
+			for (let s = 0; s <= segments; s += 1) {
+				const u = s / segments;
+				const x = u * width;
+				const y =
+					yBase +
+					Math.sin(u * Math.PI * 2 * freq + phase) * amplitude +
+					Math.cos(u * Math.PI * 2 * (freq * 0.45) - phase * 1.4) * amplitude * 0.5;
+				if (s === 0) ctx.moveTo(x, y);
+				else ctx.lineTo(x, y);
+			}
+
+			ctx.strokeStyle = `hsla(${hue}, 82%, 70%, ${0.07 + intensity * 0.1})`;
+			ctx.lineWidth = 0.8 + intensity * 1.6;
+			ctx.stroke();
 		}
-		const last = cellsByX[cellsByX.length - 1];
-		ctx.lineTo(last.x, last.y);
-		ctx.stroke();
+	}
+
+	drawHUD(width, height, intensity, palette) {
+		if (!this.statsText) return;
+		const ctx = this.ctx;
+		ctx.save();
+		ctx.globalCompositeOperation = "source-over";
+		ctx.font = "500 12px 'Fira Code', monospace";
+		ctx.textAlign = "left";
+		ctx.textBaseline = "bottom";
+
+		const label = `zlay weather  ${this.statsText}`;
+		const x = 18;
+		const y = height - 16;
+		const padX = 8;
+		const padY = 5;
+		const textWidth = ctx.measureText(label).width;
+		ctx.fillStyle = `hsla(${palette.shadow}, 45%, 12%, ${0.25 + intensity * 0.2})`;
+		ctx.fillRect(x - padX, y - 14 - padY, textWidth + padX * 2, 14 + padY * 2);
+		ctx.strokeStyle = `hsla(${palette.lead}, 85%, 72%, ${0.25 + intensity * 0.3})`;
+		ctx.strokeRect(x - padX, y - 14 - padY, textWidth + padX * 2, 14 + padY * 2);
+		ctx.fillStyle = `hsla(${palette.accent}, 95%, 78%, ${0.7 + intensity * 0.25})`;
+		ctx.fillText(label, x, y);
+		ctx.restore();
 	}
 
 	draw(timestampMs, settings) {
@@ -454,30 +507,28 @@ export class FirehoseEntropy {
 		const { width, height } = this.getViewport();
 		if (!width || !height) return;
 
-		if (!this.cells.length) this.initCells();
-
 		const dt = this.lastFrameMs
 			? Math.min((timestampMs - this.lastFrameMs) / 1000, 0.05)
 			: 1 / 60;
 		this.lastFrameMs = timestampMs;
-		this.phase += dt * (0.35 + this.windSpeed * 0.22);
 
 		this.setGain(settings.FIREHOSE_ENTROPY_GAIN);
 		this.updateRates(timestampMs);
 		this.applySettingsInfluence(settings);
 
-		if (this.intensity < 0.01 && this.eventRate < 0.5) return;
+		const intensity = clamp(this.energy, 0, 2.8);
+		if (intensity < 0.03 && this.eventRate < 0.5) return;
 
-		this.stepCells(dt, width, height);
-
-		const hueShift = this.collectionHueShift();
-		const leadHue = wrapHue(this.baseHue + hueShift * 0.7);
-		const accentHue = wrapHue(leadHue + 28 + this.opsMix.delete * 12 - this.opsMix.meta * 7);
+		this.phase += dt * (0.8 + this.windSpeed * 0.6);
+		const driftX = Math.cos(this.windAngle) * this.windSpeed;
+		const driftY = Math.sin(this.windAngle) * this.windSpeed;
+		const palette = this.computePalette(this.baseHue);
 
 		this.ctx.save();
-		this.drawAmbient(width, height, this.intensity, leadHue, accentHue);
-		this.drawCellMists(width, height, this.intensity, leadHue, accentHue);
-		this.drawFilaments(this.intensity, wrapHue(leadHue + 14));
+		this.drawAtmosphere(width, height, intensity, palette, driftX, driftY);
+		this.drawRibbons(width, height, intensity, palette, driftX, driftY);
+		this.drawContours(width, height, intensity, palette);
+		this.drawHUD(width, height, intensity, palette);
 		this.ctx.restore();
 	}
 
