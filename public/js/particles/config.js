@@ -16,8 +16,6 @@ export const RANGES = {
 	CONNECTION_WIDTH: { min: 0.1, max: 2, step: 0.1, default: 0.3 },
 	PARTICLE_COLOR: { default: "#64ffda" },
 	ENABLE_VORTEX_FORCE: { default: false },
-	FIREHOSE_ENTROPY: { default: false },
-	FIREHOSE_ENTROPY_GAIN: { min: 0.1, max: 2, step: 0.05, default: 1.0 },
 };
 
 // Generate default settings object from the RANGES

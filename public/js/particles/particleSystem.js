@@ -5,7 +5,6 @@ import { PARTICLE_COLORS } from "./config.js";
 import { SpatialHash } from "./spatialHash.js";
 import { CanvasRenderer } from "./canvasRenderer.js";
 import { MouseEffects } from "./mouseEffects.js";
-import { FirehoseEntropy } from "./firehoseEntropy.js";
 
 export class ParticleSystem {
 	constructor(canvas, overlayCanvas) {
@@ -34,10 +33,6 @@ export class ParticleSystem {
 			: this.ctx;
 
 		this.mouseEffects = new MouseEffects(this.overlayCtx);
-		this.firehoseEntropy = new FirehoseEntropy(this.overlayCtx, () => ({
-			width: this.canvas.width,
-			height: this.canvas.height,
-		}));
 
 		// Pre-allocated connection buffers (used in combined physics pass)
 		this._connPos = new Float32Array(200000 * 2 * 3);
@@ -55,8 +50,6 @@ export class ParticleSystem {
 		}, this.settingsManager.getAllSettings());
 
 		this._settings = this.settingsManager.getAllSettings();
-		this.firehoseEntropy.setGain(this._settings.FIREHOSE_ENTROPY_GAIN ?? 1);
-		this.firehoseEntropy.setEnabled(Boolean(this._settings.FIREHOSE_ENTROPY));
 
 		window.addEventListener("resize", () => this.resizeCanvas());
 		this.resizeCanvas();
@@ -108,8 +101,6 @@ export class ParticleSystem {
 
 		this.bindSystemEvents();
 		this.resizeCanvas();
-		this.firehoseEntropy.setGain(settings.FIREHOSE_ENTROPY_GAIN ?? 1);
-		this.firehoseEntropy.setEnabled(Boolean(settings.FIREHOSE_ENTROPY));
 		this.animate();
 	}
 
@@ -241,8 +232,6 @@ export class ParticleSystem {
 
 	applySettings(settings) {
 		this._settings = { ...settings };
-		this.firehoseEntropy.setGain(this._settings.FIREHOSE_ENTROPY_GAIN ?? 1);
-		this.firehoseEntropy.setEnabled(Boolean(this._settings.FIREHOSE_ENTROPY));
 
 		for (const particle of this.particles) {
 			particle.updateSettings(settings);
@@ -498,7 +487,6 @@ export class ParticleSystem {
 			this.mouseEffects.updateAndDraw(
 				timestamp, this.mouseX, this.mouseY, this.isMouseDown, this._settings,
 			);
-			this.firehoseEntropy.draw(timestamp, this._settings);
 		} else {
 			// --- Canvas 2D fallback ---
 			this.canvasRenderer.clear(this.canvas.width, this.canvas.height);
@@ -512,7 +500,6 @@ export class ParticleSystem {
 			this.mouseEffects.updateAndDraw(
 				timestamp, this.mouseX, this.mouseY, this.isMouseDown, this._settings,
 			);
-			this.firehoseEntropy.draw(timestamp, this._settings);
 
 			this.canvasRenderer.drawParticles(this.particles, this.particles.length);
 		}
@@ -524,9 +511,6 @@ export class ParticleSystem {
 		if (this.animationFrameId) {
 			cancelAnimationFrame(this.animationFrameId);
 			this.animationFrameId = null;
-		}
-		if (this.firehoseEntropy) {
-			this.firehoseEntropy.setEnabled(false);
 		}
 	}
 
