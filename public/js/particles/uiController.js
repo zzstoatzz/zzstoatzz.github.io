@@ -329,7 +329,13 @@ export class UIController {
 		const categories = {
 			'particles': ['PARTICLE_COUNT', 'GRAVITY', 'AVERAGE_PARTICLE_SIZE', 'DRAG', 'ELASTICITY'],
 			'connections': ['INTERACTION_RADIUS', 'CONNECTION_OPACITY', 'CONNECTION_WIDTH', 'CONNECTION_COLOR'],
-			'forces': ['EXPLOSION_RADIUS', 'EXPLOSION_FORCE', 'ATTRACT', 'SMOOTHING_FACTOR', 'ENABLE_VORTEX_FORCE']
+			'forces': ['EXPLOSION_RADIUS', 'EXPLOSION_FORCE', 'ATTRACT', 'SMOOTHING_FACTOR', 'ENABLE_VORTEX_FORCE'],
+			'entropy': ['FIREHOSE_ENTROPY', 'FIREHOSE_ENTROPY_GAIN']
+		};
+
+		const checkboxLabels = {
+			ENABLE_VORTEX_FORCE: "special mouse force",
+			FIREHOSE_ENTROPY: "zlay relay weather",
 		};
 		
 		for (const [category, keys] of Object.entries(categories)) {
@@ -358,7 +364,17 @@ export class UIController {
 							<label for="${key}">${labelText}</label>
 							<div class="slider-row">
 								<input type="checkbox" id="${key}" ${range.default ? 'checked' : ''}>
-								<span class="value-display">special mouse force</span>
+								<span class="value-display">${checkboxLabels[key] || "enabled"}</span>
+							</div>
+						</div>
+					`;
+				} else if (key === 'FIREHOSE_ENTROPY') {
+					html += `
+						<div class="control-group">
+							<label for="${key}">${labelText}</label>
+							<div class="slider-row">
+								<input type="checkbox" id="${key}" ${range.default ? 'checked' : ''}>
+								<span class="value-display">${checkboxLabels[key] || "enabled"}</span>
 							</div>
 						</div>
 					`;
@@ -454,15 +470,18 @@ export class UIController {
 		}
 		
 		// Checkbox controls
-		const vortexForceCheckbox = document.getElementById("ENABLE_VORTEX_FORCE");
-		if (vortexForceCheckbox) {
+		const allCheckboxes = document.querySelectorAll('input[type="checkbox"]');
+		for (const checkbox of allCheckboxes) {
+			const key = checkbox.id;
+			if (!key) continue;
+
 			const handleCheckboxChange = (e) => {
 				const value = e.target.checked;
-				this.onSettingChange("ENABLE_VORTEX_FORCE", value);
+				this.onSettingChange(key, value);
 			};
 
-			const newCheckbox = vortexForceCheckbox.cloneNode(true);
-			vortexForceCheckbox.parentNode.replaceChild(newCheckbox, vortexForceCheckbox);
+			const newCheckbox = checkbox.cloneNode(true);
+			checkbox.parentNode.replaceChild(newCheckbox, checkbox);
 
 			newCheckbox.addEventListener('change', handleCheckboxChange);
 			newCheckbox.addEventListener('touchstart', (e) => {
