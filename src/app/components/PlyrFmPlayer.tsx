@@ -102,7 +102,7 @@ export default function PlyrFmPlayer() {
     return (
         <div
             className={`fixed bottom-4 left-4 transition-all duration-300 ease-in-out z-50
-                ${isMinimized ? 'h-12 w-12 cursor-pointer' : 'w-[calc(100vw-2rem)] max-w-[400px] h-[480px]'}`}
+                ${isMinimized ? 'h-12 w-12 cursor-pointer' : 'w-[min(calc(100vw-2rem),400px)] h-[480px]'}`}
             onClick={() => isMinimized && setIsMinimized(false)}
             onKeyDown={(e) => { if (isMinimized && (e.key === 'Enter' || e.key === ' ')) setIsMinimized(false); }}
             role="button"
