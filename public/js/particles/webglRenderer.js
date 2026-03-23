@@ -73,12 +73,15 @@ export class WebGLParticleRenderer {
 			fragmentShader: `
 				varying vec3 vColor;
 				void main() {
-					vec2 c = gl_PointCoord - 0.5;
-					if (dot(c, c) > 0.25) discard;
-					gl_FragColor = vec4(vColor, 1.0);
+					vec2 cxy = 2.0 * gl_PointCoord - 1.0;
+					float r = dot(cxy, cxy);
+					float delta = fwidth(r);
+					float alpha = 1.0 - smoothstep(1.0 - delta, 1.0 + delta, r);
+					if (alpha < 0.01) discard;
+					gl_FragColor = vec4(vColor, alpha);
 				}
 			`,
-			transparent: false,
+			transparent: true,
 			depthTest: false,
 			depthWrite: false,
 		});
