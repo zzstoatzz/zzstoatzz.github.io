@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, type FC } from "react";
-import { PitchDetector, frequencyToNoteDetails } from '@/utils/pitch-detector';
+import { A4_FREQ, PitchDetector, frequencyToNoteDetails } from '@/utils/pitch-detector';
 
 const MIN_CLARITY_THRESHOLD = 0.5; // Minimum clarity to display note (low since clarity is usually high)
 const CONSECUTIVE_FRAMES_TO_SWITCH = 2; // Require N consecutive frames of different note before switching
@@ -12,6 +12,8 @@ const TunerPage: FC = () => {
 	const [clarity, setClarity] = useState<number>(0);
 	const [isListening, setIsListening] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [audioSampleRate, setAudioSampleRate] = useState<number | null>(null);
+	const [inputSettings, setInputSettings] = useState<MediaTrackSettings | null>(null);
 
 	// Ref to hold the PitchDetector instance
 	const pitchDetectorRef = useRef<PitchDetector | null>(null);
@@ -19,6 +21,11 @@ const TunerPage: FC = () => {
 	const candidateNoteRef = useRef<{ note: string; octave: number; count: number } | null>(null);
 	// Track the current displayed note for comparison
 	const currentNoteRef = useRef<{ note: string; octave: number } | null>(null);
+
+	const formatSetting = (value: unknown): string => {
+		if (value === undefined || value === null) return 'n/a';
+		return String(value);
+	};
 
 	// Callback function passed to the detector
 	const handlePitchUpdate = useCallback((detectedFrequency: number | null, detectedClarity: number) => {
@@ -79,14 +86,14 @@ const TunerPage: FC = () => {
 		try {
 			// Configure and create the detector instance
 			pitchDetectorRef.current = new PitchDetector({
-				sampleRate: 48000, // Higher sample rate
+				sampleRate: 48000, // Fallback only; the active AudioContext sample rate is used when available
 				bufferSize: 4096,  // Larger buffer
 				threshold: 0.15,   // YIN threshold
-				// Ensure the worklet path is correct relative to the public directory
-				audioWorkletPath: '/pitch-detector-worklet.js' 
 			});
 			
 			await pitchDetectorRef.current.start(handlePitchUpdate);
+			setAudioSampleRate(pitchDetectorRef.current.getAudioContextSampleRate());
+			setInputSettings(pitchDetectorRef.current.getInputSettings());
 			setIsListening(true);
 		} catch (err) {
 			console.error('Error starting pitch detector:', err);
@@ -110,6 +117,8 @@ const TunerPage: FC = () => {
 		setNoteDetails(null);
 		setClarity(0);
 		setError(null);
+		setAudioSampleRate(null);
+		setInputSettings(null);
 		candidateNoteRef.current = null;
 		currentNoteRef.current = null;
 	}, []);
@@ -223,6 +232,27 @@ const TunerPage: FC = () => {
 					<p className='text-xl text-gray-500 h-full flex items-center justify-center'>Click &quot;Start Tuning&quot; to begin</p>
 				)}
 			</div>
+
+			{isListening && (
+				<div className="mt-4 w-full max-w-md rounded bg-gray-900/70 p-3 text-left text-xs text-gray-400">
+					<div className="grid grid-cols-2 gap-x-4 gap-y-1">
+						<span>A4 reference</span>
+						<span className="text-gray-200">{A4_FREQ} Hz</span>
+						<span>AudioContext sample rate</span>
+						<span className="text-gray-200">{audioSampleRate ? `${audioSampleRate} Hz` : 'n/a'}</span>
+						<span>Input sample rate</span>
+						<span className="text-gray-200">{inputSettings?.sampleRate ? `${inputSettings.sampleRate} Hz` : 'n/a'}</span>
+						<span>Input channels</span>
+						<span className="text-gray-200">{formatSetting(inputSettings?.channelCount)}</span>
+						<span>Echo cancellation</span>
+						<span className="text-gray-200">{formatSetting(inputSettings?.echoCancellation)}</span>
+						<span>Noise suppression</span>
+						<span className="text-gray-200">{formatSetting(inputSettings?.noiseSuppression)}</span>
+						<span>Auto gain</span>
+						<span className="text-gray-200">{formatSetting(inputSettings?.autoGainControl)}</span>
+					</div>
+				</div>
+			)}
 
 		</div>
 	);

@@ -13,8 +13,136 @@ export interface PitchDetectorOptions {
 	minFrequency?: number;
 	maxFrequency?: number;
 	threshold?: number;
-	audioWorkletPath?: string; // Path to the worklet file
 }
+
+export interface YinPitchOptions {
+	minFrequency: number;
+	maxFrequency: number;
+	threshold: number;
+}
+
+export const detectPitch = (
+	buffer: Float32Array,
+	sampleRate: number,
+	yinBuffer: Float32Array,
+	options: YinPitchOptions,
+): { frequency: number | null; clarity: number } => {
+	const bufferSize = buffer.length;
+
+	if (yinBuffer.length !== bufferSize) {
+		yinBuffer = new Float32Array(bufferSize);
+	}
+
+	let period = 0;
+	let clarity = 0;
+
+	for (let tau = 0; tau < bufferSize / 2; tau++) {
+		yinBuffer[tau] = 0;
+		for (let i = 0; i < bufferSize / 2; i++) {
+			const delta = buffer[i] - buffer[i + tau];
+			yinBuffer[tau] += delta * delta;
+		}
+	}
+
+	yinBuffer[0] = 1;
+	let runningSum = 0;
+	for (let tau = 1; tau < bufferSize / 2; tau++) {
+		runningSum += yinBuffer[tau];
+		yinBuffer[tau] =
+			runningSum === 0 ? 1 : yinBuffer[tau] * (tau / runningSum);
+	}
+
+	const minTau = Math.max(1, Math.floor(sampleRate / options.maxFrequency));
+	const maxTau = Math.min(
+		Math.floor(sampleRate / options.minFrequency),
+		Math.floor(bufferSize / 2),
+	);
+	let tauEstimate = -1;
+
+	for (let tau = minTau; tau < maxTau; tau++) {
+		if (yinBuffer[tau] < options.threshold) {
+			while (tau + 1 < maxTau && yinBuffer[tau + 1] < yinBuffer[tau]) {
+				tau++;
+			}
+			tauEstimate = tau;
+			clarity = 1 - yinBuffer[tauEstimate];
+			break;
+		}
+	}
+
+	if (tauEstimate > 1 && tauEstimate < bufferSize / 2 - 1) {
+		const y1 = yinBuffer[tauEstimate - 1];
+		const y2 = yinBuffer[tauEstimate];
+		const y3 = yinBuffer[tauEstimate + 1];
+		const divisor = 2 * (2 * y2 - y1 - y3);
+		period = divisor !== 0 ? tauEstimate + (y3 - y1) / divisor : tauEstimate;
+	} else {
+		period = tauEstimate;
+	}
+
+	let frequency: number | null = null;
+	if (period > 0) {
+		frequency = sampleRate / period;
+	} else {
+		clarity = 0;
+	}
+
+	if (!frequency || !Number.isFinite(frequency)) {
+		frequency = null;
+		clarity = 0;
+	}
+
+	return { frequency, clarity };
+};
+
+const createPitchDetectorWorkletSource = (): string => `
+const detectPitch = ${detectPitch.toString()};
+
+class PitchDetectorProcessor extends AudioWorkletProcessor {
+	constructor(options) {
+		super();
+
+		const processorOptions = options.processorOptions || {};
+		this.bufferSize = processorOptions.bufferSize || 2048;
+		this.sampleRate = processorOptions.sampleRate || sampleRate;
+		this.options = {
+			minFrequency: processorOptions.minFrequency || 50,
+			maxFrequency: processorOptions.maxFrequency || 2000,
+			threshold: processorOptions.threshold || 0.15,
+		};
+
+		this.buffer = new Float32Array(this.bufferSize);
+		this.correlationBuffer = new Float32Array(this.bufferSize);
+		this.bufferIndex = 0;
+	}
+
+	process(inputs) {
+		const inputChannel = inputs[0]?.[0];
+		if (!inputChannel) return true;
+
+		for (let i = 0; i < inputChannel.length; i++) {
+			if (this.bufferIndex >= this.bufferSize) {
+				this.port.postMessage(
+					detectPitch(
+						this.buffer,
+						this.sampleRate,
+						this.correlationBuffer,
+						this.options,
+					),
+				);
+				this.bufferIndex = 0;
+			}
+
+			this.buffer[this.bufferIndex] = inputChannel[i];
+			this.bufferIndex++;
+		}
+
+		return true;
+	}
+}
+
+registerProcessor("pitch-detector-processor", PitchDetectorProcessor);
+`;
 
 export class PitchDetector {
 	private audioContext: AudioContext | null = null;
@@ -31,7 +159,6 @@ export class PitchDetector {
 	private readonly minFrequency: number;
 	private readonly maxFrequency: number;
 	private readonly threshold: number;
-	private readonly audioWorkletPath: string;
 
 	// Buffers for analysis
 	private readonly buffer: Float32Array;
@@ -44,8 +171,6 @@ export class PitchDetector {
 		this.minFrequency = options.minFrequency || 50; // Hz
 		this.maxFrequency = options.maxFrequency || 2000; // Hz
 		this.threshold = options.threshold || 0.15;
-		this.audioWorkletPath =
-			options.audioWorkletPath || "/pitch-detector-worklet.js"; // Default path
 
 		// Initialize buffers
 		this.buffer = new Float32Array(this.bufferSize);
@@ -62,9 +187,10 @@ export class PitchDetector {
 			// Get microphone access
 			this.stream = await navigator.mediaDevices.getUserMedia({
 				audio: {
-					echoCancellation: true,
-					noiseSuppression: true,
+					echoCancellation: false,
+					noiseSuppression: false,
 					autoGainControl: false,
+					channelCount: 1,
 				},
 			});
 
@@ -84,7 +210,17 @@ export class PitchDetector {
 
 			if (this.audioContext.audioWorklet) {
 				try {
-					await this.audioContext.audioWorklet.addModule(this.audioWorkletPath);
+					const workletUrl = URL.createObjectURL(
+						new Blob([createPitchDetectorWorkletSource()], {
+							type: "application/javascript",
+						}),
+					);
+
+					try {
+						await this.audioContext.audioWorklet.addModule(workletUrl);
+					} finally {
+						URL.revokeObjectURL(workletUrl);
+					}
 
 					this.workletNode = new AudioWorkletNode(
 						this.audioContext,
@@ -168,9 +304,15 @@ export class PitchDetector {
 			this.buffer.set(inputData);
 
 			// Perform pitch detection on the buffer
-			const result = this.detectPitch(
+			const result = detectPitch(
 				this.buffer,
 				this.audioContext?.sampleRate || this.sampleRate,
+				this.correlationBuffer,
+				{
+					minFrequency: this.minFrequency,
+					maxFrequency: this.maxFrequency,
+					threshold: this.threshold,
+				},
 			); // Pass buffer & sampleRate
 			callback(result.frequency, result.clarity);
 		};
@@ -179,6 +321,14 @@ export class PitchDetector {
 		this.source.connect(this.analyser);
 		this.analyser.connect(this.processor);
 		this.processor.connect(this.audioContext.destination);
+	}
+
+	getAudioContextSampleRate(): number | null {
+		return this.audioContext?.sampleRate ?? null;
+	}
+
+	getInputSettings(): MediaTrackSettings | null {
+		return this.stream?.getAudioTracks()[0]?.getSettings() ?? null;
 	}
 
 	/**
@@ -233,95 +383,6 @@ export class PitchDetector {
 		}
 	}
 
-	/**
-	 * Detect pitch using YIN algorithm
-	 * Based on the paper: "YIN, a fundamental frequency estimator for speech and music"
-	 * @param buffer The audio buffer to analyze.
-	 * @param sampleRate The sample rate of the audio.
-	 * @returns Object containing frequency (Hz) and clarity (0-1).
-	 */
-	private detectPitch(
-		buffer: Float32Array,
-		sampleRate: number,
-	): { frequency: number | null; clarity: number } {
-		const bufferSize = buffer.length;
-		let yinBuffer = this.correlationBuffer; // Re-use class buffer
-
-		// Ensure buffer has enough space (should match bufferSize)
-		if (yinBuffer.length !== bufferSize) {
-			yinBuffer = new Float32Array(bufferSize);
-			// In practice, ensure correlationBuffer is always sized correctly in constructor
-		}
-
-		let period = 0;
-		let clarity = 0;
-
-		// 1. Difference function
-		for (let tau = 0; tau < bufferSize / 2; tau++) {
-			yinBuffer[tau] = 0;
-			for (let i = 0; i < bufferSize / 2; i++) {
-				const delta = buffer[i] - buffer[i + tau];
-				yinBuffer[tau] += delta * delta;
-			}
-		}
-
-		// 2. Cumulative mean normalized difference function
-		yinBuffer[0] = 1;
-		let runningSum = 0;
-		for (let tau = 1; tau < bufferSize / 2; tau++) {
-			runningSum += yinBuffer[tau];
-			if (runningSum === 0) {
-				yinBuffer[tau] = 1;
-			} else {
-				yinBuffer[tau] *= tau / runningSum;
-			}
-		}
-
-		// 3. Absolute threshold
-		// Find the first dip below the threshold
-		const minTau = Math.max(1, Math.floor(sampleRate / this.maxFrequency));
-		const maxTau = Math.floor(sampleRate / this.minFrequency);
-		let tauEstimate = -1;
-
-		for (let tau = minTau; tau < maxTau; tau++) {
-			if (yinBuffer[tau] < this.threshold) {
-				// Check if it's a local minimum
-				while (tau + 1 < maxTau && yinBuffer[tau + 1] < yinBuffer[tau]) {
-					tau++;
-				}
-				tauEstimate = tau;
-				clarity = 1 - yinBuffer[tauEstimate]; // Clarity is 1 minus the dip value
-				break;
-			}
-		}
-
-		// 4. Parabolic interpolation (Refine the estimate)
-		if (tauEstimate > 1 && tauEstimate < bufferSize / 2 - 1) {
-			const y1 = yinBuffer[tauEstimate - 1];
-			const y2 = yinBuffer[tauEstimate];
-			const y3 = yinBuffer[tauEstimate + 1];
-			const betterTau = tauEstimate + (y3 - y1) / (2 * (2 * y2 - y1 - y3));
-			period = betterTau;
-		} else {
-			period = tauEstimate;
-		}
-
-		// Calculate frequency
-		let frequency: number | null = null;
-		if (period > 0) {
-			frequency = sampleRate / period;
-		} else {
-			clarity = 0; // No reliable period found
-		}
-
-		// Handle potential invalid frequency (e.g., NaN, Infinity)
-		if (!frequency || !Number.isFinite(frequency)) {
-			frequency = null;
-			clarity = 0;
-		}
-
-		return { frequency, clarity };
-	}
 }
 
 // --- Helper Functions (can be kept here or moved with PitchDetector) ---
@@ -340,7 +401,7 @@ const noteNames = [
 	"A#",
 	"B",
 ];
-const A4_FREQ = 440;
+export const A4_FREQ = 440;
 const A4_NOTE_INDEX = 9; // A is the 9th index (0-based) in noteNames array [C, C#, ... A, A#, B]
 const A4_OCTAVE = 4;
 
