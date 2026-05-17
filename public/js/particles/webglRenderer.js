@@ -49,12 +49,20 @@ export class WebGLParticleRenderer {
 		const positions = new Float32Array(MAX_PARTICLES * 3);
 		const colors = new Float32Array(MAX_PARTICLES * 3);
 		const sizes = new Float32Array(MAX_PARTICLES);
+		const seeds = new Float32Array(MAX_PARTICLES);
 
 		geo.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
 		geo.setAttribute('customColor', new THREE.BufferAttribute(colors, 3).setUsage(THREE.DynamicDrawUsage));
 		geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1).setUsage(THREE.DynamicDrawUsage));
+		geo.setAttribute('seed', new THREE.BufferAttribute(seeds, 1).setUsage(THREE.DynamicDrawUsage));
 		geo.setDrawRange(0, 0);
 
+		// Bubble shader.
+		// - Translucent body so colors layer like soap film.
+		// - Fresnel-style rim brightening: color is most saturated near the edge.
+		// - Off-center specular highlight (the white "reflection" you see on Apple bubbles).
+		// - Inner core kept faint to read as glass, not paint.
+		// Point sprites are scaled up (3.4x) to give the shading room to read on small radii.
 		const material = new THREE.ShaderMaterial({
 			uniforms: {
 				pixelRatio: { value: this.renderer.getPixelRatio() },
@@ -62,28 +70,57 @@ export class WebGLParticleRenderer {
 			vertexShader: `
 				attribute vec3 customColor;
 				attribute float size;
+				attribute float seed;
 				varying vec3 vColor;
+				varying float vSize;
+				varying float vSeed;
 				uniform float pixelRatio;
 				void main() {
 					vColor = customColor;
+					vSize = size;
+					vSeed = seed;
 					gl_PointSize = size * 2.0 * pixelRatio;
 					gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 				}
 			`,
 			fragmentShader: `
 				varying vec3 vColor;
+				varying float vSize;
+				varying float vSeed;
 				void main() {
+					// gl_PointCoord goes 0..1 across the point; remap to -1..1.
 					vec2 cxy = 2.0 * gl_PointCoord - 1.0;
-					float r = dot(cxy, cxy);
-					float delta = fwidth(r);
-					float alpha = 1.0 - smoothstep(1.0 - delta, 1.0 + delta, r);
-					if (alpha < 0.01) discard;
-					gl_FragColor = vec4(vColor, alpha);
+					float r2 = dot(cxy, cxy);
+					if (r2 > 1.0) discard;
+					float r = sqrt(r2);
+
+					// Per-particle gentle variation — feel, not direction.
+					float s1 = fract(vSeed * 17.31);
+					float s2 = fract(vSeed * 53.97);
+
+					// Flat-top body: solid across the disc the user actually asked for,
+					// soft roll-off only at the very edge. Preserves the user's radius
+					// while removing the hard antialiased boundary.
+					float body = 1.0 - smoothstep(0.7, 1.0, r);
+
+					// Tactile inner glow — subtle brighter core, like lit-from-within.
+					float core = 1.0 - smoothstep(0.0, 0.75, r);
+
+					// Color: source tint with a small inner lift, varied per-particle
+					// so no two read identically.
+					vec3 inner = vColor + vec3(mix(0.04, 0.12, s1));
+					vec3 finalColor = mix(vColor * 0.88, inner, core * 0.65);
+
+					// Translucent throughout — never fully opaque, even at center.
+					float alpha = body * mix(0.62, 0.78, s2) + core * 0.10;
+					if (alpha < 0.005) discard;
+					gl_FragColor = vec4(finalColor, alpha);
 				}
 			`,
 			transparent: true,
 			depthTest: false,
 			depthWrite: false,
+			blending: THREE.NormalBlending,
 		});
 
 		this.particlesMesh = new THREE.Points(geo, material);
@@ -96,33 +133,44 @@ export class WebGLParticleRenderer {
 
 		const positions = new Float32Array(MAX_CONNECTIONS * 2 * 3);
 		const alphas = new Float32Array(MAX_CONNECTIONS * 2);
+		const endpointColors = new Float32Array(MAX_CONNECTIONS * 2 * 3);
 
 		geo.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
 		geo.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1).setUsage(THREE.DynamicDrawUsage));
+		geo.setAttribute('endpointColor', new THREE.BufferAttribute(endpointColors, 3).setUsage(THREE.DynamicDrawUsage));
 		geo.setDrawRange(0, 0);
 
+		// Connections blend each endpoint's particle color with the base connection tint —
+		// reads as "energy between bubbles" rather than a flat lattice.
 		const material = new THREE.ShaderMaterial({
 			uniforms: {
 				connectionColor: { value: new THREE.Vector3(0.392, 1.0, 0.855) },
+				tintAmount: { value: 0.7 },
 			},
 			vertexShader: `
 				attribute float alpha;
+				attribute vec3 endpointColor;
 				varying float vAlpha;
+				varying vec3 vColor;
+				uniform vec3 connectionColor;
+				uniform float tintAmount;
 				void main() {
 					vAlpha = alpha;
+					vColor = mix(connectionColor, endpointColor, tintAmount);
 					gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 				}
 			`,
 			fragmentShader: `
-				uniform vec3 connectionColor;
 				varying float vAlpha;
+				varying vec3 vColor;
 				void main() {
-					gl_FragColor = vec4(connectionColor, vAlpha);
+					gl_FragColor = vec4(vColor, vAlpha);
 				}
 			`,
 			transparent: true,
 			depthTest: false,
 			depthWrite: false,
+			blending: THREE.AdditiveBlending,
 		});
 
 		this.connectionsMesh = new THREE.LineSegments(geo, material);
@@ -135,6 +183,7 @@ export class WebGLParticleRenderer {
 		const posArr = geo.getAttribute('position').array;
 		const colArr = geo.getAttribute('customColor').array;
 		const sizeArr = geo.getAttribute('size').array;
+		const seedArr = geo.getAttribute('seed').array;
 
 		for (let i = 0; i < count; i++) {
 			const p = particles[i];
@@ -156,16 +205,20 @@ export class WebGLParticleRenderer {
 			}
 
 			sizeArr[i] = p.radius;
+			seedArr[i] = p.seed;
 		}
 
 		geo.getAttribute('position').needsUpdate = true;
 		geo.getAttribute('customColor').needsUpdate = true;
 		geo.getAttribute('size').needsUpdate = true;
+		geo.getAttribute('seed').needsUpdate = true;
 		geo.setDrawRange(0, count);
 	}
 
-	// Upload pre-built connection buffer (built during physics pass to avoid double iteration)
-	uploadConnections(connPos, connAlpha, vertCount, settings) {
+	// Upload pre-built connection buffer (built during physics pass to avoid double iteration).
+	// connColor: per-endpoint RGB (Float32Array, length vertCount*3) — each line endpoint
+	// carries its source particle's color so connections gradient between bubbles.
+	uploadConnections(connPos, connAlpha, connColor, vertCount, settings) {
 		const geo = this.connectionsMesh.geometry;
 
 		if (vertCount === 0) {
@@ -173,7 +226,6 @@ export class WebGLParticleRenderer {
 			return;
 		}
 
-		// Update connection color uniform
 		const cc = settings.CONNECTION_COLOR;
 		this.connectionsMesh.material.uniforms.connectionColor.value.set(
 			parseInt(cc.slice(1, 3), 16) / 255,
@@ -183,13 +235,15 @@ export class WebGLParticleRenderer {
 
 		const posArr = geo.getAttribute('position').array;
 		const alphaArr = geo.getAttribute('alpha').array;
+		const colArr = geo.getAttribute('endpointColor').array;
 
-		// Copy from pre-built buffers
 		posArr.set(connPos.subarray(0, vertCount * 3));
 		alphaArr.set(connAlpha.subarray(0, vertCount));
+		colArr.set(connColor.subarray(0, vertCount * 3));
 
 		geo.getAttribute('position').needsUpdate = true;
 		geo.getAttribute('alpha').needsUpdate = true;
+		geo.getAttribute('endpointColor').needsUpdate = true;
 		geo.setDrawRange(0, vertCount);
 	}
 

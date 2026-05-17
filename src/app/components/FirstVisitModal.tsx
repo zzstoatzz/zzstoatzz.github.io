@@ -41,9 +41,9 @@ export default function FirstVisitModal({ onDismiss }: FirstVisitModalProps) {
       />
       
       <dialog
-        className={`relative z-10 max-w-md mx-4 p-8 rounded-2xl bg-gradient-to-br from-gray-900/90 to-gray-800/90 border border-gray-700/50 shadow-2xl transform transition-all duration-500 ${
-          isVisible && !isLeaving 
-            ? 'translate-y-0 scale-100' 
+        className={`glass-strong relative z-10 max-w-md mx-4 p-8 transform transition-all duration-500 ${
+          isVisible && !isLeaving
+            ? 'translate-y-0 scale-100'
             : 'translate-y-4 scale-95'
         }`}
         onClick={(e) => e.stopPropagation()}

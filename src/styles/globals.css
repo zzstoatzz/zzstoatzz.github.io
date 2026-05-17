@@ -17,6 +17,79 @@
 
 @layer components {
 
+    /* ----- Liquid glass design tokens -----
+     * Neutral dark glass over the particle field. Three depths for a small
+     * hierarchy: thin (cards), default (panels/nav), strong (modals/overlays).
+     *
+     * Liquid-glass cues, even with a "hairline only" choice:
+     *   - heavy blur + strong saturation so colors behind bloom through
+     *   - inset top-edge highlight: 1px line of brighter white inside the top
+     *     where real glass catches the room light
+     *   - inset bottom-edge shadow: thin dark line giving the slab a base
+     *   - subtle ambient drop shadow under each panel for layered depth
+     *
+     * Mobile-first: blur radius drops below 768px to keep GPU cost reasonable
+     * while WebGL particles are also running.
+     * Fallback for browsers without backdrop-filter degrades to a more opaque
+     * solid surface.
+     */
+    .glass,
+    .glass-thin,
+    .glass-strong {
+        position: relative;
+        background-color: rgba(14, 16, 22, 0.38);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 1rem;
+        box-shadow:
+            inset 0 1px 0 0 rgba(255, 255, 255, 0.14),
+            inset 0 -1px 0 0 rgba(0, 0, 0, 0.35),
+            0 1px 0 0 rgba(255, 255, 255, 0.03),
+            0 12px 36px -12px rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(20px) saturate(190%);
+        -webkit-backdrop-filter: blur(20px) saturate(190%);
+    }
+
+    .glass-thin {
+        background-color: rgba(14, 16, 22, 0.26);
+        backdrop-filter: blur(14px) saturate(160%);
+        -webkit-backdrop-filter: blur(14px) saturate(160%);
+        box-shadow:
+            inset 0 1px 0 0 rgba(255, 255, 255, 0.10),
+            inset 0 -1px 0 0 rgba(0, 0, 0, 0.25),
+            0 6px 20px -10px rgba(0, 0, 0, 0.45);
+    }
+
+    .glass-strong {
+        background-color: rgba(14, 16, 22, 0.50);
+        backdrop-filter: blur(30px) saturate(210%);
+        -webkit-backdrop-filter: blur(30px) saturate(210%);
+        box-shadow:
+            inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
+            inset 0 -1px 0 0 rgba(0, 0, 0, 0.4),
+            0 24px 60px -16px rgba(0, 0, 0, 0.7);
+    }
+
+    @media (max-width: 768px) {
+        .glass {
+            backdrop-filter: blur(14px) saturate(170%);
+            -webkit-backdrop-filter: blur(14px) saturate(170%);
+        }
+        .glass-thin {
+            backdrop-filter: blur(10px) saturate(150%);
+            -webkit-backdrop-filter: blur(10px) saturate(150%);
+        }
+        .glass-strong {
+            backdrop-filter: blur(20px) saturate(190%);
+            -webkit-backdrop-filter: blur(20px) saturate(190%);
+        }
+    }
+
+    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+        .glass { background-color: rgba(14, 16, 22, 0.85); }
+        .glass-thin { background-color: rgba(14, 16, 22, 0.75); }
+        .glass-strong { background-color: rgba(14, 16, 22, 0.92); }
+    }
+
     .nav {
         backdrop-filter: blur(1px);
     }

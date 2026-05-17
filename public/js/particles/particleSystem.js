@@ -37,7 +37,9 @@ export class ParticleSystem {
 		// Pre-allocated connection buffers (used in combined physics pass)
 		this._connPos = new Float32Array(200000 * 2 * 3);
 		this._connAlpha = new Float32Array(200000 * 2);
+		this._connColor = new Float32Array(200000 * 2 * 3);
 		this._connVertCount = 0;
+		this._colorCache = new Map(); // hex -> [r,g,b] memoization
 
 		this.PARTICLE_COLORS = PARTICLE_COLORS;
 
@@ -379,6 +381,8 @@ export class ParticleSystem {
 		const particles = this.particles;
 		const posArr = this._connPos;
 		const alphaArr = this._connAlpha;
+		const colArr = this._connColor;
+		const colorCache = this._colorCache;
 		let vi = 0;
 		const maxVerts = 200000 * 2;
 
@@ -423,6 +427,32 @@ export class ParticleSystem {
 					posArr[base + 5] = 0;
 					alphaArr[vi] = a;
 					alphaArr[vi + 1] = a;
+
+					let c1 = colorCache.get(p1.color);
+					if (!c1) {
+						c1 = [
+							parseInt(p1.color.slice(1, 3), 16) / 255,
+							parseInt(p1.color.slice(3, 5), 16) / 255,
+							parseInt(p1.color.slice(5, 7), 16) / 255,
+						];
+						colorCache.set(p1.color, c1);
+					}
+					let c2 = colorCache.get(p2.color);
+					if (!c2) {
+						c2 = [
+							parseInt(p2.color.slice(1, 3), 16) / 255,
+							parseInt(p2.color.slice(3, 5), 16) / 255,
+							parseInt(p2.color.slice(5, 7), 16) / 255,
+						];
+						colorCache.set(p2.color, c2);
+					}
+					colArr[base] = c1[0];
+					colArr[base + 1] = c1[1];
+					colArr[base + 2] = c1[2];
+					colArr[base + 3] = c2[0];
+					colArr[base + 4] = c2[1];
+					colArr[base + 5] = c2[2];
+
 					vi += 2;
 				}
 			}
@@ -479,7 +509,7 @@ export class ParticleSystem {
 			// Upload particle data and pre-built connections to GPU, then render
 			this.webglRenderer.updateParticles(this.particles, this.particles.length);
 			this.webglRenderer.uploadConnections(
-				this._connPos, this._connAlpha, this._connVertCount, this._settings,
+				this._connPos, this._connAlpha, this._connColor, this._connVertCount, this._settings,
 			);
 			this.webglRenderer.render();
 

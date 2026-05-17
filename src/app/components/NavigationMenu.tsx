@@ -185,9 +185,10 @@ export default function NavigationMenu() {
             {/* Nav trigger button */}
             <button
                 onClick={handleToggle}
-                className="fixed top-2 left-1/2 transform -translate-x-1/2 z-[100] bg-gray-800 bg-opacity-60 text-cyan-300/70 p-2 rounded-lg 
-                       hover:bg-opacity-80 hover:text-cyan-300 transition-all
+                className="glass-thin fixed top-2 left-1/2 transform -translate-x-1/2 z-[100] text-cyan-300/80 px-3 py-1.5
+                       hover:text-cyan-300 transition-all
                        focus:outline-none focus:ring-1 focus:ring-cyan-300/30 text-xs"
+                style={{ borderRadius: '999px' }}
                 aria-label="Toggle Navigation"
                 type="button"
             >
@@ -204,9 +205,9 @@ export default function NavigationMenu() {
                     />
                     
                     {/* Navigation panel */}
-                    <div className="relative w-full max-w-lg mx-4 bg-gray-900/95 border border-cyan-900/30 rounded-lg shadow-2xl backdrop-blur-md">
+                    <div className="glass relative w-full max-w-lg mx-4">
                         {/* Header */}
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-cyan-900/20">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
                             <h2 className="text-cyan-300 text-sm font-light">navigation</h2>
                             <div className="flex items-center gap-2">
                                 <div className="hidden sm:flex items-center gap-1 text-xs text-gray-500">
@@ -259,7 +260,7 @@ export default function NavigationMenu() {
                             
                             {/* Status & last played section */}
                             {(statusData || lastPlay) && (
-                                <div className="px-4 py-3 border-t border-cyan-900/30 mt-2 space-y-3">
+                                <div className="px-4 py-3 border-t border-white/5 mt-2 space-y-3">
                                     {statusData && (
                                         <a
                                             href="https://status.zzstoatzz.io/@zzstoatzz.io"
@@ -313,7 +314,7 @@ export default function NavigationMenu() {
                         </div>
 
                         {/* Footer with keyboard shortcuts - only on desktop */}
-                        <div className="hidden sm:block px-4 py-2 border-t border-cyan-900/20 bg-gray-900/50">
+                        <div className="hidden sm:block px-4 py-2 border-t border-white/5">
                             <div className="flex items-center gap-4 text-xs text-gray-500">
                                 <span className="flex items-center gap-1">
                                     <kbd className="px-1 py-0.5 bg-gray-800 border border-gray-700 rounded">↑↓</kbd>

@@ -25,9 +25,10 @@ export default function BackgroundSwitcher() {
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="bg-gray-800 bg-opacity-60 text-cyan-300/70 p-1.5 rounded-lg 
-                    hover:bg-opacity-80 hover:text-cyan-300 transition-all scale-90
+                className="glass-thin text-cyan-300/80 p-1.5
+                    hover:text-cyan-300 transition-all scale-90
                     focus:outline-none focus:ring-1 focus:ring-cyan-300/30"
+                style={{ borderRadius: '999px' }}
                 aria-label="Toggle background settings"
             >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -36,7 +37,7 @@ export default function BackgroundSwitcher() {
             </button>
 
             {isOpen && (
-                <div className="mt-2 bg-gray-800 bg-opacity-80 backdrop-blur-sm p-4 rounded-lg shadow-lg min-w-[300px]">
+                <div className="glass mt-2 p-4 min-w-[300px]">
                     <div className="space-y-4">
                         <div>
                             <label htmlFor="background-type" className="block text-sm text-cyan-300 mb-1">Background Type</label>

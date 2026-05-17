@@ -89,13 +89,26 @@ export const SETTINGS_STYLES = `
     z-index: 1000;
     font-family: Arial, sans-serif;
     font-size: 12px;
-    background: rgba(0, 0, 0, 0.7);
+    /* liquid glass — mirrors .glass token in globals.css */
+    background: rgba(14, 16, 22, 0.38);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1rem;
+    backdrop-filter: blur(20px) saturate(190%);
+    -webkit-backdrop-filter: blur(20px) saturate(190%);
+    box-shadow:
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.14),
+        inset 0 -1px 0 0 rgba(0, 0, 0, 0.35),
+        0 12px 36px -12px rgba(0, 0, 0, 0.6);
     color: #64ffda;
-    border-radius: 8px;
-    padding: 10px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    padding: 12px;
     min-width: 250px;
     max-width: 300px;
+}
+@media (max-width: 768px) {
+    .particle-controls {
+        backdrop-filter: blur(14px) saturate(170%);
+        -webkit-backdrop-filter: blur(14px) saturate(170%);
+    }
 }
 .settings-header {
     display: flex;

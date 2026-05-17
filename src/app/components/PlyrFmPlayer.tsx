@@ -109,26 +109,28 @@ export default function PlyrFmPlayer() {
             aria-expanded={!isMinimized}
             tabIndex={isMinimized ? 0 : -1}
         >
-            <div className="bg-black bg-opacity-80 backdrop-blur-lg rounded-lg shadow-lg overflow-visible h-full flex flex-col">
-                {/* header */}
-                <div className="h-12 px-4 flex items-center justify-between bg-black bg-opacity-40 cursor-pointer shrink-0">
-                    <div className="w-full h-full flex items-center justify-between text-xl transition-colors group">
+            <div className="glass-strong overflow-visible h-full flex flex-col">
+                {/* header — full strip is the minimize affordance when expanded */}
+                <div
+                    className="h-12 px-4 flex items-center justify-between cursor-pointer shrink-0 hover:bg-white/5 transition-colors"
+                    onClick={(e) => {
+                        if (!isMinimized) {
+                            e.stopPropagation();
+                            setIsMinimized(true);
+                        }
+                    }}
+                    role={isMinimized ? undefined : 'button'}
+                    aria-label={isMinimized ? undefined : 'minimize player'}
+                >
+                    <div className="w-full h-full flex items-center justify-between text-xl transition-colors group pointer-events-none">
                         {isMinimized ? (
                             <span className="text-cyan-300 group-hover:text-cyan-400">♪</span>
                         ) : (
                             <>
                                 <span className="text-cyan-300">♪</span>
-                                <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); setIsMinimized(true); }}
-                                    className="text-cyan-300 hover:text-cyan-100 p-1 rounded"
-                                    aria-label="minimize player"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5" aria-hidden="true">
-                                        <title>minimize player</title>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                                    </svg>
-                                </button>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-cyan-300" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                                </svg>
                             </>
                         )}
                     </div>
@@ -148,7 +150,7 @@ export default function PlyrFmPlayer() {
                             onClick={(e) => e.stopPropagation()}
                         />
                         {showResults && (
-                            <div className="absolute left-0 right-0 bottom-full mb-1 bg-black/95 border border-cyan-300/20 rounded-lg max-h-48 overflow-y-auto z-[60]">
+                            <div className="glass absolute left-0 right-0 bottom-full mb-1 max-h-48 overflow-y-auto z-[60]">
                                 {results.map((r) => (
                                     <button
                                         key={r.id}
@@ -171,15 +173,15 @@ export default function PlyrFmPlayer() {
                         )}
                     </div>
 
-                    {/* iframe */}
-                    <div className="flex-1 min-h-0">
+                    {/* iframe — clipped to the panel's bottom radius via wrapper */}
+                    <div className="flex-1 min-h-0 overflow-hidden" style={{ borderBottomLeftRadius: '1rem', borderBottomRightRadius: '1rem' }}>
                         <iframe
                             title="plyr.fm player"
                             src={embedUrl}
                             width="100%"
                             height="100%"
                             allow="autoplay"
-                            className="rounded-b-lg block"
+                            className="block"
                             style={{ border: 'none' }}
                         />
                     </div>
