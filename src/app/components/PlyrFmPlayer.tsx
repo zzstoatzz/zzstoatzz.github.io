@@ -99,17 +99,24 @@ export default function PlyrFmPlayer() {
         };
     }, []);
 
+    const hasResults = showResults && results.length > 0;
+
     return (
         <div
-            className={`fixed bottom-4 left-4 transition-all duration-300 ease-in-out z-50
-                ${isMinimized ? 'h-12 w-12 cursor-pointer' : 'w-[min(calc(100vw-2rem),400px)] h-[480px]'}`}
+            className={`fixed bottom-4 left-4 transition-all duration-300 ease-in-out z-50 ${
+                isMinimized
+                    ? 'h-12 w-12 cursor-pointer'
+                    : hasResults
+                        ? 'h-[480px] w-[min(calc(100vw-2rem),720px)]'
+                        : 'h-[480px] w-[min(calc(100vw-2rem),400px)]'
+            }`}
             onClick={() => isMinimized && setIsMinimized(false)}
             onKeyDown={(e) => { if (isMinimized && (e.key === 'Enter' || e.key === ' ')) setIsMinimized(false); }}
             role="button"
             aria-expanded={!isMinimized}
             tabIndex={isMinimized ? 0 : -1}
         >
-            <div className="glass-strong overflow-visible h-full flex flex-col">
+            <div className="glass-strong overflow-hidden h-full flex flex-col">
                 {/* header — full strip is the minimize affordance when expanded */}
                 <div
                     className="h-12 px-4 flex items-center justify-between cursor-pointer shrink-0 hover:bg-white/5 transition-colors"
@@ -137,29 +144,41 @@ export default function PlyrFmPlayer() {
                 </div>
 
                 {/* expanded content */}
-                <div className={`flex-1 flex flex-col min-h-0 transition-all duration-200 ${isMinimized ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100'}`}>
-                    {/* search */}
-                    <div className="relative shrink-0" ref={resultsRef}>
+                <div
+                    className={`flex-1 flex flex-col min-h-0 transition-all duration-200 ${isMinimized ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100'}`}
+                    ref={resultsRef}
+                >
+                    {/* search input — full width across both columns */}
+                    <div className="shrink-0 border-b border-white/5">
                         <input
                             type="text"
                             value={query}
                             onChange={(e) => handleInput(e.target.value)}
                             onFocus={() => results.length > 0 && setShowResults(true)}
-                            className="w-full bg-transparent text-cyan-300 text-sm px-4 py-2 focus:outline-none placeholder:text-gray-500"
+                            className="w-full bg-transparent text-cyan-300 text-sm px-4 py-2.5 focus:outline-none placeholder:text-gray-500"
                             placeholder="search on plyr.fm"
                             onClick={(e) => e.stopPropagation()}
                         />
-                        {showResults && (
-                            <div className="glass absolute left-0 right-0 bottom-full mb-1 max-h-48 overflow-y-auto z-[60]">
+                    </div>
+
+                    {/* results + iframe row.
+                        - no results: iframe fills the area.
+                        - results, desktop: results column on the left, iframe on the right.
+                        - results, mobile: results take over (iframe hidden) since side-by-side
+                          can't fit comfortably below 768px. */}
+                    <div className="flex-1 min-h-0 flex">
+                        {hasResults && (
+                            <div className="w-full md:w-[280px] overflow-y-auto md:border-r border-white/5 shrink-0">
                                 {results.map((r) => (
                                     <button
                                         key={r.id}
                                         type="button"
                                         onClick={(e) => { e.stopPropagation(); selectResult(r); }}
-                                        className="w-full text-left px-3 py-2 hover:bg-cyan-300/10 transition-colors flex items-center gap-2"
+                                        className="w-full text-left px-3 py-2.5 hover:bg-white/5 transition-colors flex items-center gap-3 border-b border-white/5 last:border-b-0"
                                     >
                                         {r.image_url && (
-                                            <img src={r.image_url} alt="" className="w-8 h-8 rounded object-cover shrink-0" />
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img src={r.image_url} alt="" className="w-11 h-11 rounded object-cover shrink-0" />
                                         )}
                                         <div className="min-w-0">
                                             <div className="text-cyan-300 text-sm truncate">{displayName(r)}</div>
@@ -171,19 +190,18 @@ export default function PlyrFmPlayer() {
                                 ))}
                             </div>
                         )}
-                    </div>
 
-                    {/* iframe — clipped to the panel's bottom radius via wrapper */}
-                    <div className="flex-1 min-h-0 overflow-hidden" style={{ borderBottomLeftRadius: '1rem', borderBottomRightRadius: '1rem' }}>
-                        <iframe
-                            title="plyr.fm player"
-                            src={embedUrl}
-                            width="100%"
-                            height="100%"
-                            allow="autoplay"
-                            className="block"
-                            style={{ border: 'none' }}
-                        />
+                        <div className={`flex-1 min-h-0 ${hasResults ? 'hidden md:block' : 'block'}`}>
+                            <iframe
+                                title="plyr.fm player"
+                                src={embedUrl}
+                                width="100%"
+                                height="100%"
+                                allow="autoplay"
+                                className="block"
+                                style={{ border: 'none' }}
+                            />
+                        </div>
                     </div>
                 </div>
             </div>

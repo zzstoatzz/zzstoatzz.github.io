@@ -87,7 +87,7 @@ export const SETTINGS_STYLES = `
     top: 1rem;
     right: 1rem;
     z-index: 1000;
-    font-family: Arial, sans-serif;
+    font-family: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 12px;
     /* liquid glass — mirrors .glass token in globals.css */
     background: rgba(14, 16, 22, 0.38);
@@ -99,9 +99,9 @@ export const SETTINGS_STYLES = `
         inset 0 1px 0 0 rgba(255, 255, 255, 0.14),
         inset 0 -1px 0 0 rgba(0, 0, 0, 0.35),
         0 12px 36px -12px rgba(0, 0, 0, 0.6);
-    color: #64ffda;
-    padding: 12px;
-    min-width: 250px;
+    color: rgba(255, 255, 255, 0.85);
+    padding: 14px;
+    min-width: 260px;
     max-width: 300px;
 }
 @media (max-width: 768px) {
@@ -114,117 +114,192 @@ export const SETTINGS_STYLES = `
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
 }
 .settings-header h3 {
     margin: 0;
-    font-size: 14px;
-    font-weight: normal;
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.9);
 }
 .controls-content {
     max-height: 70vh;
     overflow-y: auto;
     overflow-x: hidden;
-    padding-right: 5px;
-    margin-right: -5px;
+    padding-right: 6px;
+    margin-right: -6px;
 }
 .controls-content::-webkit-scrollbar {
-    width: 5px;
+    width: 4px;
 }
 .controls-content::-webkit-scrollbar-thumb {
-    background: rgba(100, 255, 218, 0.3);
-    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 999px;
 }
 .controls-content::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 3px;
+    background: transparent;
 }
 .control-group {
-    margin-bottom: 10px;
+    margin-bottom: 12px;
 }
 .control-group label {
     display: block;
-    margin-bottom: 5px;
-    color: rgba(100, 255, 218, 0.7);
+    margin-bottom: 6px;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 11px;
+    letter-spacing: 0.02em;
 }
 .control-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 10px;
 }
+/* Sliders — thin glass rail, soft accent thumb */
 .slider-input {
     flex-grow: 1;
-    margin-right: 10px;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08);
     -webkit-appearance: none;
-    height: 5px;
-    border-radius: 2px;
+    height: 3px;
+    border-radius: 999px;
+    outline: none;
+    cursor: pointer;
 }
 .slider-input::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    background: #64ffda;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.25),
+        0 2px 6px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+.slider-input::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+.slider-input::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
     cursor: pointer;
 }
 .value-display {
     min-width: 40px;
     text-align: right;
-    font-family: monospace;
+    font-family: 'Fira Code', ui-monospace, monospace;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.75);
 }
 .color-input {
-    width: 25px;
-    height: 25px;
-    border: none;
-    border-radius: 3px;
+    width: 28px;
+    height: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
     cursor: pointer;
     background: transparent;
+    padding: 0;
+    overflow: hidden;
 }
+.color-input::-webkit-color-swatch-wrapper { padding: 0; }
+.color-input::-webkit-color-swatch { border: none; border-radius: 999px; }
+.color-input::-moz-color-swatch { border: none; border-radius: 999px; }
+
+/* Buttons — glass-thin pills, hairline border, subtle hover lift */
 .button {
-    background: rgba(100, 255, 218, 0.2);
-    color: #64ffda;
-    border: 1px solid rgba(100, 255, 218, 0.3);
-    border-radius: 4px;
-    padding: 5px 10px;
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 999px;
+    padding: 6px 12px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 11px;
+    font-family: inherit;
+    letter-spacing: 0.02em;
+    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
 }
 .button:hover {
-    background: rgba(100, 255, 218, 0.3);
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #fff;
 }
+.button:active {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+/* Text-style inputs and selects — transparent on glass with hairline */
 .small-input {
-    width: 50px;
-    padding: 3px 5px;
-    border-radius: 3px;
-    border: 1px solid rgba(100, 255, 218, 0.3);
-    background: rgba(0, 0, 0, 0.5);
-    color: white;
+    width: 56px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.9);
+    font-family: inherit;
+    font-size: 11px;
+    outline: none;
+    transition: border-color 0.18s ease, background 0.18s ease;
+}
+.small-input:focus {
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.07);
 }
 .palette-control {
-    margin-top: 15px;
+    margin-top: 16px;
 }
 .palette-control select {
     width: 100%;
-    padding: 3px 5px;
-    border-radius: 3px;
-    border: 1px solid rgba(100, 255, 218, 0.3);
-    background: rgba(0, 0, 0, 0.5);
-    color: white;
-    margin-bottom: 5px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.9);
+    font-family: inherit;
+    font-size: 11px;
+    margin-bottom: 8px;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image:
+        linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.5) 50%),
+        linear-gradient(135deg, rgba(255,255,255,0.5) 50%, transparent 50%);
+    background-position:
+        calc(100% - 14px) center,
+        calc(100% - 9px) center;
+    background-size: 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 28px;
+}
+.palette-control select:focus {
+    border-color: rgba(255, 255, 255, 0.25);
 }
 .color-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 5px;
-    margin-top: 5px;
+    gap: 6px;
+    margin-top: 8px;
 }
 .color-item {
-    width: 20px;
-    height: 20px;
-    border-radius: 3px;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
     cursor: pointer;
     position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.color-item:hover {
+    transform: scale(1.1);
+    border-color: rgba(255, 255, 255, 0.4);
 }
 .color-item:hover::after {
     content: "×";
@@ -233,8 +308,13 @@ export const SETTINGS_STYLES = `
     left: 50%;
     transform: translate(-50%, -50%);
     color: white;
+    font-size: 14px;
     font-weight: bold;
     text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+}
+.particle-controls input[type="checkbox"] {
+    accent-color: #64ffda;
+    cursor: pointer;
 }
 `;
 
