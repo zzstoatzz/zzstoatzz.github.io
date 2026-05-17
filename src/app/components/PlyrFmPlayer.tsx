@@ -148,17 +148,53 @@ export default function PlyrFmPlayer() {
                     className={`flex-1 flex flex-col min-h-0 transition-all duration-200 ${isMinimized ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100'}`}
                     ref={resultsRef}
                 >
-                    {/* search input — full width across both columns */}
-                    <div className="shrink-0 border-b border-white/5">
-                        <input
-                            type="text"
-                            value={query}
-                            onChange={(e) => handleInput(e.target.value)}
-                            onFocus={() => results.length > 0 && setShowResults(true)}
-                            className="w-full bg-transparent text-cyan-300 text-sm px-4 py-2.5 focus:outline-none placeholder:text-gray-500"
-                            placeholder="search on plyr.fm"
-                            onClick={(e) => e.stopPropagation()}
-                        />
+                    {/* Search input — contained pill so it reads as a distinct affordance
+                        from the close strip above. text-base (16px) avoids iOS Safari's
+                        auto-zoom on focus. */}
+                    <div className="shrink-0 px-3 pt-3 pb-2">
+                        <div className="relative flex items-center gap-2 bg-white/[0.06] hover:bg-white/[0.08] focus-within:bg-white/[0.10] border border-white/10 focus-within:border-white/25 rounded-xl transition-colors">
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                className="w-4 h-4 ml-3 text-white/45 shrink-0"
+                                aria-hidden="true"
+                            >
+                                <circle cx="11" cy="11" r="7" />
+                                <path d="m21 21-4.3-4.3" />
+                            </svg>
+                            <input
+                                type="text"
+                                value={query}
+                                onChange={(e) => handleInput(e.target.value)}
+                                onFocus={() => results.length > 0 && setShowResults(true)}
+                                className="flex-1 bg-transparent text-white text-base py-3 pr-2 focus:outline-none placeholder:text-white/40 min-w-0"
+                                placeholder="search plyr.fm"
+                                onClick={(e) => e.stopPropagation()}
+                                aria-label="search plyr.fm"
+                            />
+                            {query && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setQuery('');
+                                        setResults([]);
+                                        setShowResults(false);
+                                    }}
+                                    className="mr-2 p-1 text-white/45 hover:text-white/80 transition-colors shrink-0"
+                                    aria-label="clear search"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4" aria-hidden="true">
+                                        <path d="M18 6 6 18M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     {/* results + iframe row.
