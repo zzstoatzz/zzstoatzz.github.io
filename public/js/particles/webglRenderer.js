@@ -101,7 +101,7 @@ export class WebGLParticleRenderer {
 					// Flat-top body: solid across the disc the user actually asked for,
 					// soft roll-off only at the very edge. Preserves the user's radius
 					// while removing the hard antialiased boundary.
-					float body = 1.0 - smoothstep(0.7, 1.0, r);
+					float body = 1.0 - smoothstep(0.92, 1.0, r);
 
 					// Tactile inner glow — subtle brighter core, like lit-from-within.
 					float core = 1.0 - smoothstep(0.0, 0.75, r);
