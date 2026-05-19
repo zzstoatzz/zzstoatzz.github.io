@@ -106,13 +106,13 @@ export class WebGLParticleRenderer {
 					// Tactile inner glow — subtle brighter core, like lit-from-within.
 					float core = 1.0 - smoothstep(0.0, 0.75, r);
 
-					// Color: source tint with a small inner lift, varied per-particle
-					// so no two read identically.
-					vec3 inner = vColor + vec3(mix(0.04, 0.12, s1));
-					vec3 finalColor = mix(vColor * 0.88, inner, core * 0.65);
+					// Color: source tint at full strength on the body, with a brighter
+					// inner lift at the core. Varied per-particle so no two read identically.
+					vec3 inner = vColor + vec3(mix(0.10, 0.20, s1));
+					vec3 finalColor = mix(vColor, inner, core * 0.85);
 
-					// Translucent throughout — never fully opaque, even at center.
-					float alpha = body * mix(0.62, 0.78, s2) + core * 0.10;
+					// Translucent but bright — soap-film feel without dimming the hue.
+					float alpha = body * mix(0.82, 0.95, s2) + core * 0.15;
 					if (alpha < 0.005) discard;
 					gl_FragColor = vec4(finalColor, alpha);
 				}
