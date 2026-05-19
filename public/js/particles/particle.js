@@ -31,9 +31,6 @@ export class Particle {
         
         this.color = this.getRandomColor(settings);
         this.mass = Math.PI * this.radius * this.radius;
-        // Per-particle seed: drives highlight angle/intensity in the bubble shader
-        // so reflections don't look stamped across every particle.
-        this.seed = Math.random();
     }
 
     getRandomColor() {

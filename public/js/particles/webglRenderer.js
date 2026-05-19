@@ -49,20 +49,16 @@ export class WebGLParticleRenderer {
 		const positions = new Float32Array(MAX_PARTICLES * 3);
 		const colors = new Float32Array(MAX_PARTICLES * 3);
 		const sizes = new Float32Array(MAX_PARTICLES);
-		const seeds = new Float32Array(MAX_PARTICLES);
 
 		geo.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
 		geo.setAttribute('customColor', new THREE.BufferAttribute(colors, 3).setUsage(THREE.DynamicDrawUsage));
 		geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1).setUsage(THREE.DynamicDrawUsage));
-		geo.setAttribute('seed', new THREE.BufferAttribute(seeds, 1).setUsage(THREE.DynamicDrawUsage));
 		geo.setDrawRange(0, 0);
 
-		// Bubble shader.
-		// - Translucent body so colors layer like soap film.
-		// - Fresnel-style rim brightening: color is most saturated near the edge.
-		// - Off-center specular highlight (the white "reflection" you see on Apple bubbles).
-		// - Inner core kept faint to read as glass, not paint.
-		// Point sprites are scaled up (3.4x) to give the shading room to read on small radii.
+		// Bubble shader — smooth, uniform, no per-particle randomness.
+		// Every particle renders identically: solid source color across the
+		// full disc, a very gentle inner lift for soap-film feel, hairline
+		// antialiased edge. No noise/grain.
 		const material = new THREE.ShaderMaterial({
 			uniforms: {
 				pixelRatio: { value: this.renderer.getPixelRatio() },
@@ -70,23 +66,16 @@ export class WebGLParticleRenderer {
 			vertexShader: `
 				attribute vec3 customColor;
 				attribute float size;
-				attribute float seed;
 				varying vec3 vColor;
-				varying float vSize;
-				varying float vSeed;
 				uniform float pixelRatio;
 				void main() {
 					vColor = customColor;
-					vSize = size;
-					vSeed = seed;
 					gl_PointSize = size * 2.0 * pixelRatio;
 					gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 				}
 			`,
 			fragmentShader: `
 				varying vec3 vColor;
-				varying float vSize;
-				varying float vSeed;
 				void main() {
 					// gl_PointCoord goes 0..1 across the point; remap to -1..1.
 					vec2 cxy = 2.0 * gl_PointCoord - 1.0;
@@ -94,26 +83,14 @@ export class WebGLParticleRenderer {
 					if (r2 > 1.0) discard;
 					float r = sqrt(r2);
 
-					// Per-particle gentle variation — feel, not direction.
-					float s1 = fract(vSeed * 17.31);
-					float s2 = fract(vSeed * 53.97);
+					// Hairline antialiased edge; fully opaque across the rest of the disc.
+					float alpha = 1.0 - smoothstep(0.92, 1.0, r);
 
-					// Flat-top body: solid across the disc the user actually asked for,
-					// soft roll-off only at the very edge. Preserves the user's radius
-					// while removing the hard antialiased boundary.
-					float body = 1.0 - smoothstep(0.92, 1.0, r);
+					// Gentle inner lift — keeps the bubble feel without making a
+					// bright dot that aliases at small sizes.
+					float core = 1.0 - smoothstep(0.0, 0.9, r);
+					vec3 finalColor = vColor + vec3(core * 0.08);
 
-					// Tactile inner glow — subtle brighter core, like lit-from-within.
-					float core = 1.0 - smoothstep(0.0, 0.75, r);
-
-					// Color: source tint at full strength on the body, with a brighter
-					// inner lift at the core. Varied per-particle so no two read identically.
-					vec3 inner = vColor + vec3(mix(0.10, 0.20, s1));
-					vec3 finalColor = mix(vColor, inner, core * 0.85);
-
-					// Translucent but bright — soap-film feel without dimming the hue.
-					float alpha = body * mix(0.82, 0.95, s2) + core * 0.15;
-					if (alpha < 0.005) discard;
 					gl_FragColor = vec4(finalColor, alpha);
 				}
 			`,
@@ -183,7 +160,6 @@ export class WebGLParticleRenderer {
 		const posArr = geo.getAttribute('position').array;
 		const colArr = geo.getAttribute('customColor').array;
 		const sizeArr = geo.getAttribute('size').array;
-		const seedArr = geo.getAttribute('seed').array;
 
 		for (let i = 0; i < count; i++) {
 			const p = particles[i];
@@ -205,13 +181,11 @@ export class WebGLParticleRenderer {
 			}
 
 			sizeArr[i] = p.radius;
-			seedArr[i] = p.seed;
 		}
 
 		geo.getAttribute('position').needsUpdate = true;
 		geo.getAttribute('customColor').needsUpdate = true;
 		geo.getAttribute('size').needsUpdate = true;
-		geo.getAttribute('seed').needsUpdate = true;
 		geo.setDrawRange(0, count);
 	}
 
