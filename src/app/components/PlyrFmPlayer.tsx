@@ -26,7 +26,7 @@ function displayOwner(r: SearchResult): string | undefined {
     return r.owner_display_name ?? r.artist_display_name;
 }
 
-const DEFAULT_EMBED_URL = 'https://plyr.fm/embed/playlist/71f84b8c-4cd4-41ff-a037-7df3d94164aa';
+const DEFAULT_EMBED_URL = 'https://plyr.fm/embed/radio';
 const STORAGE_KEY = 'plyrfm_embed_url';
 
 function embedUrlFor(result: SearchResult): string {
