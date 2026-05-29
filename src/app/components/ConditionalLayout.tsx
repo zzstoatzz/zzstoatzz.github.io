@@ -10,7 +10,10 @@ export default function ConditionalLayout({ children }: { children: React.ReactN
     if (isHomepage) {
         return <>{children}</>;
     }
-    
+
+    // /about provides its own "find me" footer, so the global one would duplicate it.
+    const showFooter = pathname !== '/about';
+
     return (
         <>
             {/* Full page translucent backdrop */}
@@ -21,7 +24,7 @@ export default function ConditionalLayout({ children }: { children: React.ReactN
                 <main className="flex-grow container mx-auto px-4 py-8">
                     {children}
                 </main>
-                <Footer />
+                {showFooter && <Footer />}
             </div>
         </>
     );

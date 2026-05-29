@@ -292,14 +292,6 @@
         opacity: 0.85;
     }
 
-    .about-find-icon--dot {
-        width: 0.6rem;
-        height: 0.6rem;
-        border-radius: 999px;
-        opacity: 1;
-        background: linear-gradient(135deg, #67e8f9, #818cf8);
-    }
-
     /* ---------- tuner ---------- */
     .tuner {
         width: 100%;
