@@ -24,8 +24,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
     { href: '/', label: 'home', description: 'back to the main page' },
-    { href: '/about', label: 'about', description: 'learn more about me' },
-    { href: '/contact', label: 'contact', description: 'get in touch' },
+    { href: '/about', label: 'about', description: 'who i am · get in touch' },
     { href: '/tuner', label: 'tuner', description: 'guitar tuner tool' },
 ];
 
@@ -273,12 +272,9 @@ export default function NavigationMenu() {
                                             {statusData.emoji && (
                                                 statusData.emoji.startsWith('custom:') ? (
                                                     <img
-                                                        src={`https://all-the.bufo.zone/${statusData.emoji.slice(7)}.png`}
+                                                        src={`https://find-bufo.com/e/${statusData.emoji.slice(7)}.png`}
                                                         alt={statusData.emoji.slice(7)}
                                                         className="w-10 h-10 object-contain"
-                                                        onError={(e) => {
-                                                            (e.target as HTMLImageElement).src = `https://all-the.bufo.zone/${statusData.emoji!.slice(7)}.gif`;
-                                                        }}
                                                     />
                                                 ) : (
                                                     <span aria-hidden>{statusData.emoji}</span>
