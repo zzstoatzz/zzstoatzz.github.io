@@ -141,18 +141,6 @@ export default function About() {
                 </div>
             </section>
 
-            <p className="about-work">
-                find my things on{' '}
-                <a href="https://github.com/zzstoatzz" target="_blank" rel="noopener noreferrer">
-                    github
-                </a>{' '}
-                and{' '}
-                <a href="https://tangled.org/@zzstoatzz.io" target="_blank" rel="noopener noreferrer">
-                    tangled
-                </a>
-                .
-            </p>
-
             <footer className="about-find" id="find-me">
                 <span className="about-find-label">find me</span>
                 <ul className="about-find-list">

@@ -169,16 +169,14 @@
         line-height: 1.75;
     }
 
-    .about-prose a,
-    .about-work a {
+    .about-prose a {
         color: #67e8f9;
         text-decoration: none;
         border-bottom: 1px solid rgba(103, 232, 249, 0.3);
         transition: color 0.2s, border-color 0.2s;
     }
 
-    .about-prose a:hover,
-    .about-work a:hover {
+    .about-prose a:hover {
         color: #a5f3fc;
         border-bottom-color: #a5f3fc;
     }
@@ -241,12 +239,6 @@
     .about-now-value--muted { color: #6b7280; }
     .about-now-emoji { width: 1.4rem; height: 1.4rem; object-fit: contain; }
     .about-now-artist { color: #8b919a; }
-
-    .about-work {
-        color: #9aa0a6;
-        font-size: 0.9375rem;
-        line-height: 1.6;
-    }
 
     /* find me (folded-in contact) */
     .about-find {
