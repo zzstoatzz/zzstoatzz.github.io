@@ -147,7 +147,7 @@ export default function About() {
             </section>
 
             <p className="about-work">
-                i build a lot of small things — most of it lives on{' '}
+                find my things on{' '}
                 <a href="https://github.com/zzstoatzz" target="_blank" rel="noopener noreferrer">
                     github
                 </a>{' '}
