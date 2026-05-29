@@ -94,7 +94,7 @@ export default function About() {
                     I am a physicist at heart and love graph theory. I also love listening to and playing music.
                 </p>
                 <p>
-                    Feel free to <a href="#find-me">get in touch</a> if you have an idea for a project or just want to chat!
+                    Feel free to get in touch if you have an idea for a project or just want to chat!
                 </p>
             </div>
 
