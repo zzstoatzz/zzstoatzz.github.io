@@ -27,7 +27,6 @@ function displayOwner(r: SearchResult): string | undefined {
 }
 
 const DEFAULT_EMBED_URL = 'https://plyr.fm/embed/radio';
-const STORAGE_KEY = 'plyrfm_embed_url';
 
 function embedUrlFor(result: SearchResult): string {
     if (result.type === 'track') return `https://plyr.fm/embed/track/${result.id}`;
@@ -42,11 +41,6 @@ export default function PlyrFmPlayer() {
     const [showResults, setShowResults] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const resultsRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) setEmbedUrl(saved);
-    }, []);
 
     const search = useCallback(async (q: string) => {
         if (!q.trim()) {
@@ -78,7 +72,6 @@ export default function PlyrFmPlayer() {
     const selectResult = (result: SearchResult) => {
         const url = embedUrlFor(result);
         setEmbedUrl(url);
-        localStorage.setItem(STORAGE_KEY, url);
         setQuery('');
         setResults([]);
         setShowResults(false);
