@@ -493,6 +493,7 @@ export class MouseEffects {
 			position: fixed;
 			bottom: 20px;
 			right: 20px;
+			pointer-events: none;
 			font-family: monospace;
 			font-size: 12px;
 			color: rgba(255, 255, 255, 0.8);
