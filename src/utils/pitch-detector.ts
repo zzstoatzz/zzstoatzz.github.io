@@ -5,6 +5,7 @@
 export type AudioProcessCallback = (
 	frequency: number | null,
 	clarity: number,
+	level: number,
 ) => void;
 
 export interface PitchDetectorOptions {
@@ -122,14 +123,18 @@ class PitchDetectorProcessor extends AudioWorkletProcessor {
 
 		for (let i = 0; i < inputChannel.length; i++) {
 			if (this.bufferIndex >= this.bufferSize) {
-				this.port.postMessage(
-					detectPitch(
-						this.buffer,
-						this.sampleRate,
-						this.correlationBuffer,
-						this.options,
-					),
+				let sumSquares = 0;
+				for (let s = 0; s < this.bufferSize; s++) {
+					sumSquares += this.buffer[s] * this.buffer[s];
+				}
+				const result = detectPitch(
+					this.buffer,
+					this.sampleRate,
+					this.correlationBuffer,
+					this.options,
 				);
+				result.level = Math.sqrt(sumSquares / this.bufferSize);
+				this.port.postMessage(result);
 				this.bufferIndex = 0;
 			}
 
@@ -238,7 +243,11 @@ export class PitchDetector {
 
 					this.workletNode.port.onmessage = (event) => {
 						if (event.data.frequency !== undefined) {
-							callback(event.data.frequency, event.data.clarity);
+							callback(
+								event.data.frequency,
+								event.data.clarity,
+								event.data.level ?? 0,
+							);
 						}
 					};
 
@@ -314,7 +323,16 @@ export class PitchDetector {
 					threshold: this.threshold,
 				},
 			); // Pass buffer & sampleRate
-			callback(result.frequency, result.clarity);
+
+			let sumSquares = 0;
+			for (let i = 0; i < this.buffer.length; i++) {
+				sumSquares += this.buffer[i] * this.buffer[i];
+			}
+			callback(
+				result.frequency,
+				result.clarity,
+				Math.sqrt(sumSquares / this.buffer.length),
+			);
 		};
 
 		// Connect nodes: Source -> Analyser -> Processor -> Destination

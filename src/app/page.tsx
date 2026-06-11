@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import FirstVisitModal from './components/FirstVisitModal';
+import AudioRig from './components/AudioRig';
 
 export default function Home() {
     const [showModal, setShowModal] = useState(false);
@@ -27,6 +28,7 @@ export default function Home() {
     return (
         <main className="h-screen relative">
             {showModal && <FirstVisitModal onDismiss={handleDismiss} />}
+            <AudioRig />
         </main>
     );
 }

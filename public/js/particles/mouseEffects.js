@@ -491,7 +491,7 @@ export class MouseEffects {
 		this.leaderboardElement.id = "ghost-leaderboard";
 		this.leaderboardElement.style.cssText = `
 			position: fixed;
-			bottom: 20px;
+			bottom: 110px;
 			right: 20px;
 			pointer-events: none;
 			font-family: monospace;

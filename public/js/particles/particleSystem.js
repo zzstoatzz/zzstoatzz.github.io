@@ -5,6 +5,7 @@ import { PARTICLE_COLORS } from "./config.js";
 import { SpatialHash } from "./spatialHash.js";
 import { CanvasRenderer } from "./canvasRenderer.js";
 import { MouseEffects } from "./mouseEffects.js";
+import { AudioModes } from "./audioModes.js";
 
 export class ParticleSystem {
 	constructor(canvas, overlayCanvas) {
@@ -33,6 +34,7 @@ export class ParticleSystem {
 			: this.ctx;
 
 		this.mouseEffects = new MouseEffects(this.overlayCtx);
+		this.audioModes = new AudioModes(this.mouseEffects);
 
 		// Pre-allocated connection buffers (used in combined physics pass)
 		this._connPos = new Float32Array(200000 * 2 * 3);
@@ -212,6 +214,19 @@ export class ParticleSystem {
 				this._settings,
 			);
 		});
+	}
+
+	// Called from React (mic toggle) with live pitch-detector output
+	setAudioSignal(frequency, clarity, level) {
+		this.audioModes.setSignal(frequency, clarity, level);
+	}
+
+	setAudioEnabled(enabled) {
+		this.audioModes.setEnabled(enabled);
+	}
+
+	setAudioMode(mode) {
+		this.audioModes.setMode(mode);
 	}
 
 	isPointInCanvas(clientX, clientY) {
@@ -496,6 +511,21 @@ export class ParticleSystem {
 
 		this._settings = this.settingsManager.getAllSettings();
 
+		// Voice forces apply before physics integration
+		this.audioModes.update(deltaTime, this.particles, this.canvas.width, this.canvas.height);
+
+		// While a voice hold is active, the vortex visuals charge at screen center
+		let fxX = this.mouseX;
+		let fxY = this.mouseY;
+		let fxDown = this.isMouseDown;
+		let fxSettings = this._settings;
+		if (this.audioModes.virtualHold) {
+			fxX = this.canvas.width / 2;
+			fxY = this.canvas.height / 2;
+			fxDown = true;
+			fxSettings = { ...this._settings, ENABLE_VORTEX_FORCE: true };
+		}
+
 		// Physics (same for both paths)
 		this.updateParticles(deltaTime);
 
@@ -514,9 +544,7 @@ export class ParticleSystem {
 			this.webglRenderer.render();
 
 			// Mouse effects on overlay (Canvas 2D)
-			this.mouseEffects.updateAndDraw(
-				timestamp, this.mouseX, this.mouseY, this.isMouseDown, this._settings,
-			);
+			this.mouseEffects.updateAndDraw(timestamp, fxX, fxY, fxDown, fxSettings);
 		} else {
 			// --- Canvas 2D fallback ---
 			this.canvasRenderer.clear(this.canvas.width, this.canvas.height);
@@ -527,9 +555,7 @@ export class ParticleSystem {
 
 			this.canvasRenderer.drawConnections(this.particles, this.spatialHash, this._settings);
 
-			this.mouseEffects.updateAndDraw(
-				timestamp, this.mouseX, this.mouseY, this.isMouseDown, this._settings,
-			);
+			this.mouseEffects.updateAndDraw(timestamp, fxX, fxY, fxDown, fxSettings);
 
 			this.canvasRenderer.drawParticles(this.particles, this.particles.length);
 		}
