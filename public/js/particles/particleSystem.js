@@ -202,23 +202,27 @@ export class ParticleSystem {
 				if (e.touches.length > 0 && this.isMouseDown) {
 					const touch = e.touches[0];
 
-					// if the finger has wandered past a small threshold, treat it
-					// as a scroll gesture: release the hold and let the page move.
-					if (!this.touchScrolling) {
-						const dx = touch.clientX - this.touchStartX;
-						const dy = touch.clientY - this.touchStartY;
-						if (Math.hypot(dx, dy) > 10) {
-							this.touchScrolling = true;
-							this.isMouseDown = false;
-							this.mouseEffects.cancelHold();
-							return;
+					// On a scrollable page (content routes like /about), scrolling
+					// must always win. We never preventDefault here: iOS commits the
+					// scroll-vs-no-scroll decision on the first touchmove, so a single
+					// early preventDefault would lock out scroll for the whole gesture.
+					// Once the finger moves, cancel the hold so no effect fires.
+					if (this.isPageScrollable()) {
+						if (!this.touchScrolling) {
+							const dx = touch.clientX - this.touchStartX;
+							const dy = touch.clientY - this.touchStartY;
+							if (Math.hypot(dx, dy) > 10) {
+								this.touchScrolling = true;
+								this.isMouseDown = false;
+								this.mouseEffects.cancelHold();
+							}
 						}
+						return;
 					}
 
-					if (this.touchScrolling) return;
-
+					// Non-scrollable page (homepage): drag the effect with the finger
+					// and suppress the browser's overscroll/bounce.
 					this.handleMouseMove({ clientX: touch.clientX, clientY: touch.clientY });
-					// stationary hold — suppress scroll so the effect stays anchored
 					e.preventDefault();
 				}
 			},
@@ -233,6 +237,12 @@ export class ParticleSystem {
 				this._settings,
 			);
 		});
+	}
+
+	// True when the document is taller than the viewport, i.e. the user can
+	// scroll. On such pages touch must scroll the page, not drive particles.
+	isPageScrollable() {
+		return document.documentElement.scrollHeight > window.innerHeight + 1;
 	}
 
 	isPointInCanvas(clientX, clientY) {
