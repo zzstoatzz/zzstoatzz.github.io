@@ -180,10 +180,14 @@ export class ParticleSystem {
 
 						if (!isUIElement) {
 							this.isMouseDown = true;
+							this.touchStartX = touch.clientX;
+							this.touchStartY = touch.clientY;
+							this.touchScrolling = false;
 							const rect = this.canvas.getBoundingClientRect();
 							this.mouseX = touch.clientX - rect.left;
 							this.mouseY = touch.clientY - rect.top;
-							e.preventDefault();
+							// don't preventDefault here — let the browser keep the
+							// option to scroll until we know this is a stationary hold
 							this.mouseEffects.startHold();
 						}
 					}
@@ -197,7 +201,24 @@ export class ParticleSystem {
 			(e) => {
 				if (e.touches.length > 0 && this.isMouseDown) {
 					const touch = e.touches[0];
+
+					// if the finger has wandered past a small threshold, treat it
+					// as a scroll gesture: release the hold and let the page move.
+					if (!this.touchScrolling) {
+						const dx = touch.clientX - this.touchStartX;
+						const dy = touch.clientY - this.touchStartY;
+						if (Math.hypot(dx, dy) > 10) {
+							this.touchScrolling = true;
+							this.isMouseDown = false;
+							this.mouseEffects.cancelHold();
+							return;
+						}
+					}
+
+					if (this.touchScrolling) return;
+
 					this.handleMouseMove({ clientX: touch.clientX, clientY: touch.clientY });
+					// stationary hold — suppress scroll so the effect stays anchored
 					e.preventDefault();
 				}
 			},

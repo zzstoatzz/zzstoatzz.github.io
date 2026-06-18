@@ -26,6 +26,14 @@ export class MouseEffects {
 		this.releaseEndTime = null;
 	}
 
+	// Abort an in-progress hold without firing a release effect.
+	// Used when a touch turns into a scroll gesture.
+	cancelHold() {
+		this.holdStartTime = null;
+		this.releaseMultiplier = 1;
+		this.releaseEndTime = null;
+	}
+
 	stopHold(mouseX, mouseY, canvasWidth, canvasHeight, settings) {
 		if (!this.holdStartTime) return;
 
