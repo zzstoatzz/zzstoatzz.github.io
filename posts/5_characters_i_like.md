@@ -66,7 +66,7 @@ date: "2024-09-22"
 <br>
 
 <center>
-    <img src="/assets/images/gangsallhere.webp" alt="gangs all here" />
+    <img src="/assets/images/gangsallhere.webp" alt="gangs all here" loading="lazy" decoding="async" />
 </center>
 
 | Character | Name                                       | Unicode |

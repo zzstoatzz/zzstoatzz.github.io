@@ -100,7 +100,7 @@ Don't ask me how though, this is my blog and I'm just rambling.
 
 <br>
 
-<img src="/assets/images/based.png" alt="Based meme" />
+<img src="/assets/images/based.png" alt="Based meme" loading="lazy" decoding="async" />
 
 <br>
 

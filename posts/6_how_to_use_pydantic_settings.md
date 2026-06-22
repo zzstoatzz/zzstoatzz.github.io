@@ -68,7 +68,7 @@ when I look at the above code, it feels like it's going to cause downstream clut
 <br>
 
 <center>
-    <img src="/assets/images/optional.png" alt="option" style="width: 70%; height: auto;" />
+    <img src="/assets/images/optional.png" alt="option" style="width: 70%; height: auto;" loading="lazy" decoding="async" />
 </center>
 
 <br>
@@ -99,7 +99,7 @@ export OPENAI_API_KEY="sk-yeah-right"
 <br>
 
 <center>
-    <img src="https://imgs.search.brave.com/l12Rlg74gxhsQFaUN33WXsVqsdLUcCLHf8l2APHZD4U/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly9hLnBp/bmF0YWZhcm0uY29t/LzYyMHg1NzIvYjBh/OGVjMDlhNS9mZWVs/cy1nb29kLW1hbi5q/cGc" alt="feels good man" style="width: 100%; height: auto;" />
+    <img src="https://imgs.search.brave.com/l12Rlg74gxhsQFaUN33WXsVqsdLUcCLHf8l2APHZD4U/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly9hLnBp/bmF0YWZhcm0uY29t/LzYyMHg1NzIvYjBh/OGVjMDlhNS9mZWVs/cy1nb29kLW1hbi5q/cGc" alt="feels good man" style="width: 100%; height: auto;" loading="lazy" decoding="async" />
 </center>
 
 <br>
@@ -310,7 +310,7 @@ Installed 6 packages in 16ms
 <br>
 
 <center>
-    <img src="/assets/images/welcome.png" alt="Based meme" />
+    <img src="/assets/images/welcome.png" alt="Based meme" loading="lazy" decoding="async" />
 </center>
 
 <br>
@@ -342,7 +342,7 @@ Sure, yes, sometimes this level of type safety and validation is overkill - howe
 and if you ever let me catch you using `load_dotenv()` I will stare at you like this
 
 <center>
-    <img src="/assets/images/ominous-gopher.png" alt="stare" style="width: 100%; height: auto;" />
+    <img src="/assets/images/ominous-gopher.png" alt="stare" style="width: 100%; height: auto;" loading="lazy" decoding="async" />
 </center>
 
 <br>

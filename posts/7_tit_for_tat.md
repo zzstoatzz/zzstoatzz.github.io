@@ -39,5 +39,5 @@ the quote is trite but bears repeating:
 <br>
 
 <center>
-    <img src="/assets/images/eye-for-an-eye.jpg" alt="eye for an eye" />
+    <img src="/assets/images/eye-for-an-eye.jpg" alt="eye for an eye" loading="lazy" decoding="async" />
 </center>

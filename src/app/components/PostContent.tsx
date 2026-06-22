@@ -35,7 +35,7 @@ export default function PostContent({ content }: PostContentProps) {
     };
 
     renderer.image = (href, title, text) => {
-      return `<img src="${href}" alt="${text}" title="${title || ''}" class="mx-auto" />`;
+      return `<img src="${href}" alt="${text}" title="${title || ''}" class="mx-auto" loading="lazy" decoding="async" />`;
     };
 
     renderer.link = (href, title, text) => {

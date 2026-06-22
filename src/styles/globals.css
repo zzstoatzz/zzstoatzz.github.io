@@ -8,8 +8,7 @@
     }
     body {
         @apply h-full;
-        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500&display=swap');
-        font-family: 'Fira Code', monospace;
+        font-family: var(--font-fira-code), monospace;
         background-color: #1a1a1a;
         color: #d8dee5;
     }

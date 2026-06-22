@@ -22,18 +22,16 @@ export class UIController {
 			styleElement.textContent = SETTINGS_STYLES;
 			document.head.appendChild(styleElement);
 			
-			// Add additional minimalist styles with Fira Code font
+			// Add additional minimalist styles using the site font.
 			const additionalStyles = document.createElement('style');
 			additionalStyles.textContent = `
-				@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500&display=swap');
-				
 				.particle-controls {
 					background: rgba(16, 20, 24, 0.8) !important;
 					border-radius: 12px !important;
 					backdrop-filter: blur(10px) !important;
 					box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
 					border: 1px solid rgba(100, 255, 218, 0.15) !important;
-					font-family: 'Fira Code', monospace !important;
+					font-family: var(--font-fira-code), monospace !important;
 					max-width: 90% !important;
 					width: 280px !important;
 					overflow: hidden !important;
@@ -75,7 +73,7 @@ export class UIController {
 					border: none !important;
 					color: #64ffda !important;
 					cursor: pointer !important;
-					font-family: 'Fira Code', monospace !important;
+					font-family: var(--font-fira-code), monospace !important;
 					font-size: 18px !important;
 					padding: 8px !important;
 					width: 36px !important;
@@ -118,7 +116,7 @@ export class UIController {
 					font-size: 12px !important;
 					color: rgba(255, 255, 255, 0.7) !important;
 					margin-bottom: 8px !important;
-					font-family: 'Fira Code', monospace !important;
+					font-family: var(--font-fira-code), monospace !important;
 					letter-spacing: 0.5px !important;
 					text-transform: lowercase !important;
 				}
@@ -164,7 +162,7 @@ export class UIController {
 					text-align: right !important;
 					font-size: 12px !important;
 					color: #64ffda !important;
-					font-family: 'Fira Code', monospace !important;
+					font-family: var(--font-fira-code), monospace !important;
 				}
 				
 				.button-row {
@@ -178,7 +176,7 @@ export class UIController {
 					background: rgba(100, 255, 218, 0.1) !important;
 					border: 1px solid rgba(100, 255, 218, 0.2) !important;
 					color: #64ffda !important;
-					font-family: 'Fira Code', monospace !important;
+					font-family: var(--font-fira-code), monospace !important;
 					font-size: 12px !important;
 					padding: 10px 16px !important;
 					border-radius: 6px !important;
@@ -213,7 +211,7 @@ export class UIController {
 					color: #0a192f !important;
 					padding: 8px 16px !important;
 					border-radius: 4px !important;
-					font-family: 'Fira Code', monospace !important;
+					font-family: var(--font-fira-code), monospace !important;
 					font-size: 12px !important;
 					opacity: 0 !important;
 					transition: opacity 0.3s ease !important;

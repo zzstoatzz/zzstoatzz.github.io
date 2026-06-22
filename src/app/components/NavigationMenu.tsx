@@ -59,7 +59,7 @@ export default function NavigationMenu() {
 
     // Status fetching from ATProto
     useEffect(() => {
-        if (!mounted) return;
+        if (!mounted || !isOpen) return;
 
         let cancelled = false;
         const controller = new AbortController();
@@ -93,11 +93,11 @@ export default function NavigationMenu() {
             controller.abort();
             clearInterval(id);
         };
-    }, [mounted]);
+    }, [mounted, isOpen]);
 
     // Last played track fetching from ATProto
     useEffect(() => {
-        if (!mounted) return;
+        if (!mounted || !isOpen) return;
 
         let cancelled = false;
         const controller = new AbortController();
@@ -127,7 +127,7 @@ export default function NavigationMenu() {
             controller.abort();
             clearInterval(id);
         };
-    }, [mounted]);
+    }, [mounted, isOpen]);
 
     // Keyboard shortcuts
     useEffect(() => {
@@ -301,6 +301,7 @@ export default function NavigationMenu() {
                                                 height="120"
                                                 frameBorder="0"
                                                 allow="autoplay"
+                                                loading="lazy"
                                                 style={{ borderRadius: '6px', border: 'none' }}
                                             />
                                         </div>

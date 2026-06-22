@@ -35,6 +35,7 @@ function embedUrlFor(result: SearchResult): string {
 
 export default function PlyrFmPlayer() {
     const [isMinimized, setIsMinimized] = useState(true);
+    const [hasOpened, setHasOpened] = useState(false);
     const [embedUrl, setEmbedUrl] = useState(DEFAULT_EMBED_URL);
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<SearchResult[]>([]);
@@ -77,6 +78,11 @@ export default function PlyrFmPlayer() {
         setShowResults(false);
     };
 
+    const expandPlayer = () => {
+        setHasOpened(true);
+        setIsMinimized(false);
+    };
+
     // close dropdown on outside click
     useEffect(() => {
         const handler = (e: MouseEvent | TouchEvent) => {
@@ -103,8 +109,8 @@ export default function PlyrFmPlayer() {
                         ? 'h-[480px] w-[min(calc(100vw-2rem),720px)]'
                         : 'h-[480px] w-[min(calc(100vw-2rem),400px)]'
             }`}
-            onClick={() => isMinimized && setIsMinimized(false)}
-            onKeyDown={(e) => { if (isMinimized && (e.key === 'Enter' || e.key === ' ')) setIsMinimized(false); }}
+            onClick={() => isMinimized && expandPlayer()}
+            onKeyDown={(e) => { if (isMinimized && (e.key === 'Enter' || e.key === ' ')) expandPlayer(); }}
             role="button"
             aria-expanded={!isMinimized}
             tabIndex={isMinimized ? 0 : -1}
@@ -221,15 +227,18 @@ export default function PlyrFmPlayer() {
                         )}
 
                         <div className={`flex-1 min-h-0 ${hasResults ? 'hidden md:block' : 'block'}`}>
-                            <iframe
-                                title="plyr.fm player"
-                                src={embedUrl}
-                                width="100%"
-                                height="100%"
-                                allow="autoplay"
-                                className="block"
-                                style={{ border: 'none' }}
-                            />
+                            {hasOpened && (
+                                <iframe
+                                    title="plyr.fm player"
+                                    src={embedUrl}
+                                    width="100%"
+                                    height="100%"
+                                    allow="autoplay"
+                                    loading="lazy"
+                                    className="block"
+                                    style={{ border: 'none' }}
+                                />
+                            )}
                         </div>
                     </div>
                 </div>
