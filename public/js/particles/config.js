@@ -7,7 +7,7 @@ export const RANGES = {
 	EXPLOSION_RADIUS: { min: 50, max: 500, step: 10, default: 250 },
 	EXPLOSION_FORCE: { min: 0, max: 30, step: 1, default: 1.0 },
 	ATTRACT: { min: -1000, max: 1000, step: 1, default: -100 },
-	GRAVITY: { min: -100, max: 100, step: 0.5, default: 0 },
+	GRAVITY: { min: -25, max: 25, step: 0.5, default: 0 },
 	ELASTICITY: { min: 0.1, max: 1.0, step: 0.05, default: 0.8 },
 	INTERACTION_RADIUS: { min: 10, max: 300, step: 5, default: 60 },
 	SMOOTHING_FACTOR: { min: 0.01, max: 0.3, step: 0.01, default: 0.13 },
