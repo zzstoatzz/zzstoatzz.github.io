@@ -1,14 +1,26 @@
 // Integer-key spatial hash for efficient neighbor queries.
-// Replaces string "x,y" keys with integer hash: cx * 73856093 ^ cy * 19349663
+// The key packs the two cell coords into one int (16 bits each), which is
+// bijective for coords in [-32768, 32767] — no hash collisions in that range,
+// so a bucket only ever holds particles from a single real cell.
+
+// Half of the 8-neighbor offsets: one representative per opposite-facing pair.
+// Visiting only these (plus in-cell pairs) enumerates each unordered pair once,
+// instead of the full 3x3 scan that saw every cross-cell pair twice.
+const FORWARD_NEIGHBORS = [
+	[1, -1],
+	[1, 0],
+	[1, 1],
+	[0, 1],
+];
 
 export class SpatialHash {
 	constructor() {
-		this.cells = new Map(); // Map<number, number[]>
+		this.cells = new Map(); // Map<number, { cx, cy, items: number[] }>
 		this.cellSize = 50;
 	}
 
 	_hash(cx, cy) {
-		return (cx * 73856093) ^ (cy * 19349663);
+		return ((cx & 0xffff) << 16) | (cy & 0xffff);
 	}
 
 	update(particles, count, cellSize) {
@@ -25,37 +37,43 @@ export class SpatialHash {
 
 			let cell = this.cells.get(key);
 			if (!cell) {
-				cell = [];
+				cell = { cx, cy, items: [] };
 				this.cells.set(key, cell);
 			}
-			cell.push(i);
-
-			// Store cell coords on particle for neighbor lookup
-			p._cx = cx;
-			p._cy = cy;
+			cell.items.push(i);
 		}
 	}
 
-	// Iterate all unique (i, j) pairs in same or adjacent cells.
+	// Iterate every unique (i, j) pair in the same or an adjacent cell exactly
+	// once, with i < j.
 	forEachPair(particles, callback) {
-		for (const [, indices] of this.cells) {
-			if (indices.length === 0) continue;
+		for (const cell of this.cells.values()) {
+			const items = cell.items;
+			const n = items.length;
 
-			const rep = particles[indices[0]];
-			const cx = rep._cx;
-			const cy = rep._cy;
+			// In-cell pairs.
+			for (let a = 0; a < n; a++) {
+				const i = items[a];
+				for (let b = a + 1; b < n; b++) {
+					const j = items[b];
+					if (i < j) callback(i, j);
+					else callback(j, i);
+				}
+			}
 
-			for (let nx = cx - 1; nx <= cx + 1; nx++) {
-				for (let ny = cy - 1; ny <= cy + 1; ny++) {
-					const neighborKey = this._hash(nx, ny);
-					const neighborIndices = this.cells.get(neighborKey);
-					if (!neighborIndices) continue;
+			// Forward-neighbor pairs only — the reverse direction is covered
+			// when that neighbor is the current cell.
+			for (const [dx, dy] of FORWARD_NEIGHBORS) {
+				const neighbor = this.cells.get(this._hash(cell.cx + dx, cell.cy + dy));
+				if (!neighbor) continue;
 
-					for (const i of indices) {
-						for (const j of neighborIndices) {
-							if (i >= j) continue;
-							callback(i, j);
-						}
+				const nItems = neighbor.items;
+				for (let a = 0; a < n; a++) {
+					const i = items[a];
+					for (let b = 0; b < nItems.length; b++) {
+						const j = nItems[b];
+						if (i < j) callback(i, j);
+						else callback(j, i);
 					}
 				}
 			}
@@ -76,7 +94,7 @@ export class SpatialHash {
 				const cell = this.cells.get(key);
 				if (!cell) continue;
 
-				for (const i of cell) {
+				for (const i of cell.items) {
 					const p = particles[i];
 					const dx = p.x - x;
 					const dy = p.y - y;
