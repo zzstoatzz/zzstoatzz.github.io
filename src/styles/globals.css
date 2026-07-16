@@ -12,6 +12,24 @@
         background-color: #1a1a1a;
         color: #d8dee5;
     }
+
+    /* On touch devices a stationary hold drives the particle effects, but iOS
+     * interprets the same long-press as "select text" and pops the magnifier/
+     * callout. Kill selection globally on coarse pointers and re-enable it only
+     * inside real prose (posts), where long-press-to-copy is what you want. */
+    @media (pointer: coarse) {
+        body {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        article,
+        .prose {
+            -webkit-touch-callout: default;
+            -webkit-user-select: text;
+            user-select: text;
+        }
+    }
 }
 
 @layer components {
