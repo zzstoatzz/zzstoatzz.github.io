@@ -3,18 +3,11 @@ export const SHAPE_TYPES = ["circle", "square", "triangle"];
 const TYPE_CODES = { circle: "c", square: "s", triangle: "t" };
 const CODE_TYPES = { c: "circle", s: "square", t: "triangle" };
 
-// Index 0 is the void — an unfilled hole punched in the field. The rest match
-// the particle palette so shapes read as part of the same world.
-export const SHAPE_COLORS = [
-	null,
-	"#64ffda",
-	"#00bfff",
-	"#bd93f9",
-	"#ff79c6",
-	"#ffb86c",
-	"#ff6b6b",
-	"#42b883",
-];
+// A shape's colour is a hex string, or null for an unfilled void.
+export const DEFAULT_SHAPE_COLOR = "#64ffda";
+
+// Colours used to be a palette index. Links minted then still resolve.
+const LEGACY_PALETTE = [null, "#64ffda", "#00bfff", "#bd93f9", "#ff79c6", "#ffb86c", "#ff6b6b", "#42b883"];
 
 export const MIN_SHAPE_RADIUS = 14;
 
@@ -29,6 +22,12 @@ function polyVerts(shape) {
 		verts.push(shape.x + Math.cos(a) * shape.r, shape.y + Math.sin(a) * shape.r);
 	}
 	return verts;
+}
+
+function parseColor(field) {
+	if (/^[0-9a-f]{6}$/i.test(field)) return `#${field.toLowerCase()}`;
+	if (/^[0-7]$/.test(field)) return LEGACY_PALETTE[Number(field)];
+	return null;
 }
 
 export function shapePath(ctx, shape) {
@@ -70,7 +69,7 @@ export class ShapeField {
 		for (const shape of this.shapes) this._project(shape);
 	}
 
-	add(type, x, y, r, color = 0) {
+	add(type, x, y, r, color = null) {
 		const shape = {
 			type: SHAPE_TYPES.includes(type) ? type : "circle",
 			color,
@@ -254,7 +253,7 @@ export class ShapeField {
 
 	draw(ctx, preview = null, selected = null) {
 		for (const shape of this.shapes) {
-			const hex = SHAPE_COLORS[shape.color] || null;
+			const hex = shape.color;
 			ctx.beginPath();
 			shapePath(ctx, shape);
 			ctx.fillStyle = hex ? hexToRgba(hex, 0.82) : "rgba(0, 0, 0, 0.72)";
@@ -271,7 +270,7 @@ export class ShapeField {
 			ctx.setLineDash([6, 6]);
 			ctx.beginPath();
 			shapePath(ctx, preview);
-			const hex = SHAPE_COLORS[preview.color] || null;
+			const hex = preview.color;
 			ctx.fillStyle = hex ? hexToRgba(hex, 0.3) : "rgba(0, 0, 0, 0.45)";
 			ctx.fill();
 			ctx.strokeStyle =
@@ -310,7 +309,10 @@ export class ShapeField {
 	serialize() {
 		const ms = (v) => Math.round(v * 1000);
 		return this.shapes
-			.map((s) => `${TYPE_CODES[s.type]}${s.color || 0}_${ms(s.fx)}_${ms(s.fy)}_${ms(s.fr)}`)
+			.map((s) => {
+				const color = s.color ? s.color.slice(1).toLowerCase() : "n";
+				return `${TYPE_CODES[s.type]}${color}_${ms(s.fx)}_${ms(s.fy)}_${ms(s.fr)}`;
+			})
 			.join("*");
 	}
 
@@ -320,12 +322,13 @@ export class ShapeField {
 		for (const part of str.split("*")) {
 			const type = CODE_TYPES[part[0]];
 			if (!type) continue;
-			const color = Number.parseInt(part[1], 10);
-			const nums = part.slice(2).split("_").filter((s) => s !== "").map(Number);
-			if (nums.length !== 3 || !nums.every(Number.isFinite)) continue;
+			const fields = part.slice(1).split("_");
+			if (fields.length !== 4) continue;
+			const nums = fields.slice(1).map(Number);
+			if (!nums.every(Number.isFinite)) continue;
 			const shape = {
 				type,
-				color: Number.isFinite(color) && SHAPE_COLORS[color] !== undefined ? color : 0,
+				color: parseColor(fields[0]),
 				rot: 0,
 				fx: nums[0] / 1000,
 				fy: nums[1] / 1000,

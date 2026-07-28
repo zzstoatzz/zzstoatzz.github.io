@@ -466,7 +466,9 @@ export class UIController {
 
 	bindEvents() {
 		// Get all settings sliders and add direct event listeners
-		const allRangeInputs = document.querySelectorAll('input[type="range"]');
+		// Scoped to the panel: other components (the shape dock) also put
+		// inputs in the document, and a bare selector would hijack them.
+		const allRangeInputs = document.querySelectorAll('.particle-controls input[type="range"]');
 		
 		for (const input of allRangeInputs) {
 			// Extract key from ID
@@ -513,7 +515,7 @@ export class UIController {
 		}
 		
 		// Set up special controls: color picker
-		const colorPicker = document.querySelector('input[type="color"]');
+		const colorPicker = document.getElementById("CONNECTION_COLOR");
 		if (colorPicker) {
 			const handleColorChange = (e) => {
 				const value = e.target.value;
