@@ -110,6 +110,66 @@ export class UIController {
 					padding-bottom: 16px !important;
 					border-bottom: 1px solid rgba(100, 255, 218, 0.05) !important;
 				}
+
+				.control-section {
+					border-bottom: 1px solid rgba(100, 255, 218, 0.08) !important;
+				}
+
+				.section-toggle {
+					width: 100% !important;
+					display: flex !important;
+					align-items: center !important;
+					gap: 8px !important;
+					background: transparent !important;
+					border: none !important;
+					padding: 12px 4px !important;
+					color: rgba(255, 255, 255, 0.75) !important;
+					font-family: var(--font-fira-code), monospace !important;
+					font-size: 12px !important;
+					letter-spacing: 0.5px !important;
+					text-transform: lowercase !important;
+					cursor: pointer !important;
+					text-align: left !important;
+				}
+
+				.section-toggle:hover { color: #64ffda !important; }
+				.section-toggle[aria-expanded="true"] { color: #64ffda !important; }
+
+				.section-toggle .chevron {
+					display: inline-block !important;
+					transition: transform 0.2s ease !important;
+					font-size: 9px !important;
+					opacity: 0.7 !important;
+				}
+
+				.section-toggle[aria-expanded="true"] .chevron {
+					transform: rotate(90deg) !important;
+				}
+
+				.section-body {
+					display: none !important;
+					padding: 4px 0 12px !important;
+				}
+
+				.section-body.open { display: block !important; }
+
+				.section-note {
+					margin: 0 0 10px !important;
+					font-size: 11px !important;
+					line-height: 1.5 !important;
+					color: rgba(255, 255, 255, 0.45) !important;
+				}
+
+				.button.armed {
+					background: rgba(100, 255, 218, 0.25) !important;
+					border-color: rgba(100, 255, 218, 0.5) !important;
+				}
+
+				.section-body .control-group:last-child {
+					margin-bottom: 0 !important;
+					padding-bottom: 0 !important;
+					border-bottom: none !important;
+				}
 				
 				.control-group label {
 					display: block !important;
@@ -322,17 +382,26 @@ export class UIController {
 
 	generateControlGroups() {
 		let html = '';
-		
+
 		// Group controls by category with updated names and added ELASTICITY
 		const categories = {
 			'particles': ['PARTICLE_COUNT', 'GRAVITY', 'AVERAGE_PARTICLE_SIZE', 'DRAG', 'ELASTICITY'],
 			'connections': ['INTERACTION_RADIUS', 'CONNECTION_OPACITY', 'CONNECTION_WIDTH', 'CONNECTION_COLOR'],
 			'forces': ['EXPLOSION_RADIUS', 'EXPLOSION_FORCE', 'ATTRACT', 'SMOOTHING_FACTOR', 'ENABLE_VORTEX_FORCE']
 		};
-		
+
+		let first = true;
 		for (const [category, keys] of Object.entries(categories)) {
-			html += `<div class="control-group"><h4 style="margin-top: 0; margin-bottom: 10px; font-size: 11px; color: #64ffda;">${category}</h4>`;
-			
+			const open = first;
+			first = false;
+			html += `
+				<div class="control-section">
+					<button type="button" class="section-toggle" data-section="${category}" aria-expanded="${open}">
+						<span class="chevron">▶</span>${category}
+					</button>
+					<div class="section-body${open ? ' open' : ''}" data-section-body="${category}">
+			`;
+
 			for (const key of keys) {
 				const range = RANGES[key];
 				if (!range) continue;
@@ -373,10 +442,25 @@ export class UIController {
 					`;
 				}
 			}
-			
-			html += '</div>';
+
+			html += '</div></div>';
 		}
-		
+
+		html += `
+			<div class="control-section">
+				<button type="button" class="section-toggle" data-section="shapes" aria-expanded="false">
+					<span class="chevron">▶</span>shapes
+				</button>
+				<div class="section-body" data-section-body="shapes">
+					<p class="section-note">solid obstacles the particles have to flow around.</p>
+					<div class="button-row" style="margin-top: 0; flex-direction: column;">
+						<button id="toggleShapeMode" class="button">place shapes</button>
+						<button id="clearShapes" class="button">clear all shapes</button>
+					</div>
+				</div>
+			</div>
+		`;
+
 		return html;
 	}
 
@@ -572,6 +656,49 @@ export class UIController {
 			}, { passive: false });
 		}
 		
+		// Accordion sections — one open at a time
+		for (const toggle of document.querySelectorAll('.section-toggle')) {
+			toggle.addEventListener('click', () => {
+				const wasOpen = toggle.getAttribute('aria-expanded') === 'true';
+				for (const other of document.querySelectorAll('.section-toggle')) {
+					other.setAttribute('aria-expanded', 'false');
+				}
+				for (const body of document.querySelectorAll('.section-body')) {
+					body.classList.remove('open');
+				}
+				if (!wasOpen) {
+					toggle.setAttribute('aria-expanded', 'true');
+					document
+						.querySelector(`[data-section-body="${toggle.dataset.section}"]`)
+						?.classList.add('open');
+				}
+			});
+		}
+
+		// Shape mode
+		const shapeModeButton = document.getElementById("toggleShapeMode");
+		if (shapeModeButton) {
+			shapeModeButton.addEventListener('click', () => {
+				const editor = window.particleSystem?.shapeEditor;
+				if (!editor) return;
+				editor.toggle();
+				this.setShapeModeActive(editor.active);
+				// Get the panel out of the way so the whole canvas is placeable.
+				if (editor.active) this.hideControlPanel();
+			});
+		}
+
+		const clearShapesButton = document.getElementById("clearShapes");
+		if (clearShapesButton) {
+			clearShapesButton.addEventListener('click', () => {
+				const system = window.particleSystem;
+				if (!system) return;
+				system.shapeField.clear();
+				system.settingsManager.updateSetting("SHAPES", "");
+				this.showSuccessMessage("shapes cleared");
+			});
+		}
+
 		// Close when clicking outside
 		document.addEventListener('click', (e) => {
 			if (this.particleControls && this.particleControls.style.display !== "none") {
@@ -593,6 +720,13 @@ export class UIController {
 		}, { passive: true });
 	}
 	
+	setShapeModeActive(active) {
+		const button = document.getElementById("toggleShapeMode");
+		if (!button) return;
+		button.classList.toggle("armed", active);
+		button.textContent = active ? "placing…" : "place shapes";
+	}
+
 	showControlPanel() {
 		if (this.particleControls) {
 			this.particleControls.style.display = "block";

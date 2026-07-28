@@ -5,6 +5,8 @@ import { PARTICLE_COLORS } from "./config.js";
 import { SpatialHash } from "./spatialHash.js";
 import { CanvasRenderer } from "./canvasRenderer.js";
 import { MouseEffects } from "./mouseEffects.js";
+import { ShapeField } from "./shapes.js";
+import { ShapeEditor } from "./shapeEditor.js";
 
 export class ParticleSystem {
 	constructor(canvas, overlayCanvas) {
@@ -43,13 +45,22 @@ export class ParticleSystem {
 
 		this.PARTICLE_COLORS = PARTICLE_COLORS;
 
+		this.shapeField = new ShapeField();
+		this.shapeField.resize(this.canvas.width, this.canvas.height);
+
 		this.settingsManager = new SettingsManager((settings) => {
 			this.applySettings(settings);
+		});
+
+		this.shapeEditor = new ShapeEditor(this.shapeField, this.canvas, () => {
+			this.settingsManager.updateSetting("SHAPES", this.shapeField.serialize());
 		});
 
 		this.uiController = new UIController((key, value) => {
 			this.settingsManager.updateSetting(key, value);
 		}, this.settingsManager.getAllSettings());
+
+		this.shapeEditor.onDeactivate = () => this.uiController.setShapeModeActive(false);
 
 		this._settings = this.settingsManager.getAllSettings();
 
@@ -122,6 +133,10 @@ export class ParticleSystem {
 		if (this.webglRenderer) {
 			this.webglRenderer.resize(this.canvas.width, this.canvas.height);
 		}
+
+		if (this.shapeField) {
+			this.shapeField.resize(this.canvas.width, this.canvas.height);
+		}
 	}
 
 	bindSystemEvents() {
@@ -144,6 +159,7 @@ export class ParticleSystem {
 		document.addEventListener("mousemove", (e) => this.handleMouseMove(e));
 
 		document.addEventListener("mousedown", (e) => {
+			if (this.shapeEditor.active) return;
 			if (this.isPointInCanvas(e.clientX, e.clientY)) {
 				this.isMouseDown = true;
 				const rect = this.canvas.getBoundingClientRect();
@@ -154,6 +170,7 @@ export class ParticleSystem {
 		});
 
 		document.addEventListener("mouseup", () => {
+			if (this.shapeEditor.active) return;
 			this.isMouseDown = false;
 			this.mouseEffects.stopHold(
 				this.mouseX, this.mouseY,
@@ -165,6 +182,7 @@ export class ParticleSystem {
 		document.addEventListener(
 			"touchstart",
 			(e) => {
+				if (this.shapeEditor.active) return;
 				if (e.touches.length > 0) {
 					const touch = e.touches[0];
 					if (this.isPointInCanvas(touch.clientX, touch.clientY)) {
@@ -199,6 +217,7 @@ export class ParticleSystem {
 		document.addEventListener(
 			"touchmove",
 			(e) => {
+				if (this.shapeEditor.active) return;
 				if (e.touches.length > 0 && this.isMouseDown) {
 					const touch = e.touches[0];
 
@@ -230,6 +249,7 @@ export class ParticleSystem {
 		);
 
 		document.addEventListener("touchend", () => {
+			if (this.shapeEditor.active) return;
 			this.isMouseDown = false;
 			this.mouseEffects.stopHold(
 				this.mouseX, this.mouseY,
@@ -265,6 +285,11 @@ export class ParticleSystem {
 
 	applySettings(settings) {
 		this._settings = { ...settings };
+
+		const serialized = settings.SHAPES || "";
+		if (this.shapeField && serialized !== this.shapeField.serialize()) {
+			this.shapeField.deserialize(serialized);
+		}
 
 		for (const particle of this.particles) {
 			particle.updateSettings(settings);
@@ -510,8 +535,12 @@ export class ParticleSystem {
 
 		this.applyMouseForce();
 
+		const elasticity = settings.ELASTICITY !== undefined ? settings.ELASTICITY : 0.8;
+		const hasShapes = this.shapeField.count > 0;
+
 		for (const particle of this.particles) {
 			particle.update(this.deltaTime, this.canvas.width, this.canvas.height, settings);
+			if (hasShapes) this.shapeField.collide(particle, elasticity);
 		}
 	}
 
@@ -544,6 +573,8 @@ export class ParticleSystem {
 			);
 			this.webglRenderer.render();
 
+			this.shapeField.draw(this.overlayCtx, this.shapeEditor.preview);
+
 			// Mouse effects on overlay (Canvas 2D)
 			this.mouseEffects.updateAndDraw(
 				timestamp, this.mouseX, this.mouseY, this.isMouseDown, this._settings,
@@ -563,6 +594,9 @@ export class ParticleSystem {
 			);
 
 			this.canvasRenderer.drawParticles(this.particles, this.particles.length);
+
+			// Shapes on the overlay so they occlude particles drawn beneath them.
+			this.shapeField.draw(this.overlayCtx, this.shapeEditor.preview);
 		}
 
 		this.animationFrameId = requestAnimationFrame((t) => this.animate(t));
