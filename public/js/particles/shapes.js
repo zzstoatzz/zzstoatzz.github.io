@@ -3,6 +3,19 @@ export const SHAPE_TYPES = ["circle", "square", "triangle"];
 const TYPE_CODES = { circle: "c", square: "s", triangle: "t" };
 const CODE_TYPES = { c: "circle", s: "square", t: "triangle" };
 
+// Index 0 is the void — an unfilled hole punched in the field. The rest match
+// the particle palette so shapes read as part of the same world.
+export const SHAPE_COLORS = [
+	null,
+	"#64ffda",
+	"#00bfff",
+	"#bd93f9",
+	"#ff79c6",
+	"#ffb86c",
+	"#ff6b6b",
+	"#42b883",
+];
+
 export const MIN_SHAPE_RADIUS = 14;
 
 // Regular polygon inscribed in the shape's circumradius. Squares are rotated a
@@ -18,7 +31,7 @@ function polyVerts(shape) {
 	return verts;
 }
 
-function addPath(ctx, shape) {
+export function shapePath(ctx, shape) {
 	if (shape.type === "circle") {
 		ctx.moveTo(shape.x + shape.r, shape.y);
 		ctx.arc(shape.x, shape.y, shape.r, 0, Math.PI * 2);
@@ -30,8 +43,16 @@ function addPath(ctx, shape) {
 	ctx.closePath();
 }
 
-// Shapes are stored in normalized canvas coordinates so they survive resizes
-// and can round-trip through the share URL. Pixel geometry is derived.
+function hexToRgba(hex, alpha) {
+	const r = Number.parseInt(hex.slice(1, 3), 16);
+	const g = Number.parseInt(hex.slice(3, 5), 16);
+	const b = Number.parseInt(hex.slice(5, 7), 16);
+	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// Shapes are stored as offsets from the canvas centre, in units of the smaller
+// canvas dimension. One uniform scale for both axes keeps an arrangement's
+// proportions intact when it is reopened on a differently shaped screen.
 export class ShapeField {
 	constructor() {
 		this.shapes = [];
@@ -49,41 +70,69 @@ export class ShapeField {
 		for (const shape of this.shapes) this._project(shape);
 	}
 
-	add(type, x, y, r) {
+	add(type, x, y, r, color = 0) {
 		const shape = {
 			type: SHAPE_TYPES.includes(type) ? type : "circle",
-			fx: x / this.width,
-			fy: y / this.height,
-			fr: r / this._refSize(),
+			color,
 			rot: 0,
+			...this._normalize(x, y, r),
 		};
 		this._project(shape);
 		this.shapes.push(shape);
 		return shape;
 	}
 
-	removeAt(x, y) {
-		for (let i = this.shapes.length - 1; i >= 0; i--) {
-			if (this.contains(this.shapes[i], x, y, 0)) {
-				this.shapes.splice(i, 1);
-				return true;
-			}
-		}
-		return false;
+	remove(shape) {
+		const i = this.shapes.indexOf(shape);
+		if (i === -1) return false;
+		this.shapes.splice(i, 1);
+		return true;
 	}
 
 	clear() {
 		this.shapes.length = 0;
 	}
 
-	_refSize() {
+	setCenter(shape, x, y) {
+		const n = this._normalize(x, y, shape.r);
+		shape.fx = n.fx;
+		shape.fy = n.fy;
+		this._project(shape);
+	}
+
+	setRadius(shape, r) {
+		shape.fr = Math.max(MIN_SHAPE_RADIUS, r) / this._ref();
+		this._project(shape);
+	}
+
+	setColor(shape, color) {
+		shape.color = color;
+	}
+
+	setType(shape, type) {
+		if (!SHAPE_TYPES.includes(type)) return;
+		shape.type = type;
+		this._project(shape);
+	}
+
+	_ref() {
 		return Math.min(this.width, this.height) || 1;
 	}
 
+	_normalize(x, y, r) {
+		const ref = this._ref();
+		return {
+			fx: (x - this.width / 2) / ref,
+			fy: (y - this.height / 2) / ref,
+			fr: r / ref,
+		};
+	}
+
 	_project(shape) {
-		shape.x = shape.fx * this.width;
-		shape.y = shape.fy * this.height;
-		shape.r = Math.max(1, shape.fr * this._refSize());
+		const ref = this._ref();
+		shape.x = this.width / 2 + shape.fx * ref;
+		shape.y = this.height / 2 + shape.fy * ref;
+		shape.r = Math.max(1, shape.fr * ref);
 
 		if (shape.type === "circle") {
 			shape.verts = null;
@@ -135,14 +184,16 @@ export class ShapeField {
 		return true;
 	}
 
-	hitTest(x, y) {
+	hitTest(x, y, pad = 0) {
 		for (let i = this.shapes.length - 1; i >= 0; i--) {
-			if (this.contains(this.shapes[i], x, y, 0)) return this.shapes[i];
+			if (this.contains(this.shapes[i], x, y, pad)) return this.shapes[i];
 		}
 		return null;
 	}
 
 	// Push a particle out of any shape it has entered and reflect its velocity.
+	// Mirrors the canvas-wall response in particle.js, including the tangential
+	// jitter that keeps particles from rattling in place against a surface.
 	collide(particle, elasticity) {
 		if (this.shapes.length === 0) return;
 
@@ -193,27 +244,35 @@ export class ShapeField {
 				const j = -(1 + elasticity) * vn;
 				particle.vx += nx * j;
 				particle.vy += ny * j;
+
+				const jitter = (Math.random() - 0.5) * 0.1 * Math.abs(vn);
+				particle.vx += -ny * jitter;
+				particle.vy += nx * jitter;
 			}
 		}
 	}
 
-	draw(ctx, preview = null) {
-		if (this.shapes.length > 0) {
+	draw(ctx, preview = null, selected = null) {
+		for (const shape of this.shapes) {
+			const hex = SHAPE_COLORS[shape.color] || null;
 			ctx.beginPath();
-			for (const shape of this.shapes) addPath(ctx, shape);
-			ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
+			shapePath(ctx, shape);
+			ctx.fillStyle = hex ? hexToRgba(hex, 0.82) : "rgba(0, 0, 0, 0.72)";
 			ctx.fill();
-			ctx.strokeStyle = "rgba(100, 255, 218, 0.22)";
-			ctx.lineWidth = 1;
+			ctx.strokeStyle = hex ? hexToRgba(hex, 0.9) : "rgba(100, 255, 218, 0.22)";
+			ctx.lineWidth = hex ? 1.5 : 1;
 			ctx.stroke();
 		}
+
+		if (selected && this.shapes.includes(selected)) this._drawSelection(ctx, selected);
 
 		if (preview && preview.r >= 1) {
 			ctx.save();
 			ctx.setLineDash([6, 6]);
 			ctx.beginPath();
-			addPath(ctx, preview);
-			ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+			shapePath(ctx, preview);
+			const hex = SHAPE_COLORS[preview.color] || null;
+			ctx.fillStyle = hex ? hexToRgba(hex, 0.3) : "rgba(0, 0, 0, 0.45)";
 			ctx.fill();
 			ctx.strokeStyle =
 				preview.r >= MIN_SHAPE_RADIUS ? "rgba(100, 255, 218, 0.8)" : "rgba(255, 107, 107, 0.7)";
@@ -223,21 +282,56 @@ export class ShapeField {
 		}
 	}
 
+	_drawSelection(ctx, shape) {
+		ctx.save();
+		ctx.beginPath();
+		shapePath(ctx, shape);
+		ctx.strokeStyle = "rgba(100, 255, 218, 0.95)";
+		ctx.lineWidth = 2;
+		ctx.stroke();
+
+		const h = this.handlePos(shape);
+		ctx.beginPath();
+		ctx.arc(h.x, h.y, 8, 0, Math.PI * 2);
+		ctx.fillStyle = "#64ffda";
+		ctx.fill();
+		ctx.strokeStyle = "rgba(10, 15, 20, 0.9)";
+		ctx.lineWidth = 2;
+		ctx.stroke();
+		ctx.restore();
+	}
+
+	// Resize grip, pinned to the shape's lower-right on the bounding circle.
+	handlePos(shape) {
+		const a = Math.PI / 4;
+		return { x: shape.x + Math.cos(a) * shape.r, y: shape.y + Math.sin(a) * shape.r };
+	}
+
 	serialize() {
+		const ms = (v) => Math.round(v * 1000);
 		return this.shapes
-			.map((s) => `${TYPE_CODES[s.type]}${s.fx.toFixed(4)},${s.fy.toFixed(4)},${s.fr.toFixed(4)}`)
-			.join(";");
+			.map((s) => `${TYPE_CODES[s.type]}${s.color || 0}_${ms(s.fx)}_${ms(s.fy)}_${ms(s.fr)}`)
+			.join("*");
 	}
 
 	deserialize(str) {
 		this.shapes.length = 0;
 		if (!str) return;
-		for (const part of str.split(";")) {
+		for (const part of str.split("*")) {
 			const type = CODE_TYPES[part[0]];
 			if (!type) continue;
-			const [fx, fy, fr] = part.slice(1).split(",").map(Number.parseFloat);
-			if (![fx, fy, fr].every(Number.isFinite)) continue;
-			const shape = { type, fx, fy, fr, rot: 0 };
+			const color = Number.parseInt(part[1], 10);
+			const nums = part.slice(2).split("_").filter((s) => s !== "").map(Number);
+			if (nums.length !== 3 || !nums.every(Number.isFinite)) continue;
+			const shape = {
+				type,
+				color: Number.isFinite(color) && SHAPE_COLORS[color] !== undefined ? color : 0,
+				rot: 0,
+				fx: nums[0] / 1000,
+				fy: nums[1] / 1000,
+				fr: nums[2] / 1000,
+			};
+			if (shape.fr <= 0) continue;
 			this._project(shape);
 			this.shapes.push(shape);
 		}

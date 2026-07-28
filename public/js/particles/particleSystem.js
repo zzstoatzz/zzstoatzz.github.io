@@ -573,7 +573,7 @@ export class ParticleSystem {
 			);
 			this.webglRenderer.render();
 
-			this.shapeField.draw(this.overlayCtx, this.shapeEditor.preview);
+			this.shapeField.draw(this.overlayCtx, this.shapeEditor.preview, this.shapeEditor.selected);
 
 			// Mouse effects on overlay (Canvas 2D)
 			this.mouseEffects.updateAndDraw(
@@ -596,7 +596,7 @@ export class ParticleSystem {
 			this.canvasRenderer.drawParticles(this.particles, this.particles.length);
 
 			// Shapes on the overlay so they occlude particles drawn beneath them.
-			this.shapeField.draw(this.overlayCtx, this.shapeEditor.preview);
+			this.shapeField.draw(this.overlayCtx, this.shapeEditor.preview, this.shapeEditor.selected);
 		}
 
 		this.animationFrameId = requestAnimationFrame((t) => this.animate(t));
