@@ -2,6 +2,24 @@
 // Draws to its own Canvas 2D overlay context.
 // Extracted from particleSystem.js updateAndDrawMouseEffects().
 
+// localStorage throws in sandboxed iframes (e.g. leaflet.pub embeds) —
+// even reading window.localStorage raises without allow-same-origin.
+function storageGet(key) {
+	try {
+		return localStorage.getItem(key);
+	} catch {
+		return null;
+	}
+}
+
+function storageSet(key, value) {
+	try {
+		localStorage.setItem(key, value);
+	} catch {
+		// sandboxed iframe: nothing to persist
+	}
+}
+
 export class MouseEffects {
 	constructor(ctx) {
 		this.ctx = ctx;
@@ -10,7 +28,7 @@ export class MouseEffects {
 		// Hold tracking
 		this.holdStartTime = null;
 		this.bestHoldDuration = Number.parseFloat(
-			localStorage.getItem("torchBearerHighScore") || "0",
+			storageGet("torchBearerHighScore") || "0",
 		);
 		this.releaseMultiplier = 1;
 		this.releaseEndTime = null;
@@ -66,7 +84,7 @@ export class MouseEffects {
 
 		if (duration > this.bestHoldDuration) {
 			this.bestHoldDuration = duration;
-			localStorage.setItem("torchBearerHighScore", this.bestHoldDuration.toString());
+			storageSet("torchBearerHighScore", this.bestHoldDuration.toString());
 
 			this._updateLeaderboardDisplay();
 			this.leaderboardElement.classList.add("visible");

@@ -8,7 +8,13 @@ export default function Home() {
     const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
-        const hasSeenInstructions = localStorage.getItem('zenInstructionsSeen');
+        // localStorage throws in sandboxed iframes (e.g. leaflet.pub embeds)
+        let hasSeenInstructions = 'true';
+        try {
+            hasSeenInstructions = localStorage.getItem('zenInstructionsSeen') ?? '';
+        } catch {
+            // sandboxed iframe: treat as already-seen
+        }
         if (!hasSeenInstructions) {
             setShowModal(true);
         }
@@ -17,7 +23,11 @@ export default function Home() {
 
     const handleDismiss = () => {
         setShowModal(false);
-        localStorage.setItem('zenInstructionsSeen', 'true');
+        try {
+            localStorage.setItem('zenInstructionsSeen', 'true');
+        } catch {
+            // sandboxed iframe: nothing to persist
+        }
     };
 
     if (!isInitialized) {
