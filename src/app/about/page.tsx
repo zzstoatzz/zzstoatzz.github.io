@@ -155,7 +155,7 @@ export default function About() {
                         </a>
                     </li>
                     <li>
-                        <a href="mailto:zzstoatzz@protonmail.com">
+                        <a href="mailto:n8@zzstoatzz.io">
                             <Mail className="about-find-icon" aria-hidden size={16} />
                             <span>email</span>
                         </a>

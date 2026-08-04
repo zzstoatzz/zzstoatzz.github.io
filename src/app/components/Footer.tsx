@@ -3,7 +3,7 @@ import { GithubIcon, BlueskyIcon, TANGLED_DOLLY } from './icons';
 
 export default function Footer() {
     const socialLinks: { href: string; label: string; icon: React.ReactNode }[] = [
-        { href: 'mailto:zzstoatzz@protonmail.com', label: 'Email', icon: <Mail size={24} aria-hidden /> },
+        { href: 'mailto:n8@zzstoatzz.io', label: 'Email', icon: <Mail size={24} aria-hidden /> },
         { href: 'https://github.com/zzstoatzz', label: 'GitHub', icon: <GithubIcon width={24} height={24} /> },
         { href: 'https://bsky.app/profile/zzstoatzz.io', label: 'Bluesky', icon: <BlueskyIcon width={24} height={24} /> },
         { href: 'https://tangled.org/@zzstoatzz.io', label: 'Tangled', icon: <img src={TANGLED_DOLLY} alt="" width={24} height={24} className="opacity-80" /> },
