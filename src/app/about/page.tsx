@@ -51,7 +51,7 @@ export default function About() {
             })
             .catch(() => {});
 
-        listRecords('fm.teal.alpha.feed.play', controller.signal)
+        listRecords('fm.teal.feed.play', controller.signal)
             .then((data) => {
                 const record = data.records?.[0]?.value as LastPlay | undefined;
                 if (!cancelled && record?.trackName) setLastPlay(record);

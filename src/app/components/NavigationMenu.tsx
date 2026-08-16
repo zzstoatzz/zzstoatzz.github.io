@@ -105,7 +105,7 @@ export default function NavigationMenu() {
         async function fetchLastPlay() {
             try {
                 const res = await fetch(
-                    'https://pds.zzstoatzz.io/xrpc/com.atproto.repo.listRecords?repo=did:plc:xbtmt2zjwlrfegqvch7fboei&collection=fm.teal.alpha.feed.play&limit=1',
+                    'https://pds.zzstoatzz.io/xrpc/com.atproto.repo.listRecords?repo=did:plc:xbtmt2zjwlrfegqvch7fboei&collection=fm.teal.feed.play&limit=1',
                     { signal: controller.signal, cache: 'no-store' }
                 );
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
