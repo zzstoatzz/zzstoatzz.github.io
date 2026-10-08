@@ -12,18 +12,18 @@ src/app/
 ├── components/
 │   ├── ParticlesContainer.tsx    # React wrapper for particle system
 │   ├── Background.tsx            # Background component
-│   ├── NavigationDrawer.tsx      # Site navigation
+│   ├── NavigationMenu.tsx        # Site navigation
 │   └── ...other UI components
 ├── contexts/                     # React contexts
-├── pages/                        # Next.js pages
-└── styles/                       # CSS styles
+├── layout.tsx, page.tsx          # App Router root
+└── about/, contact/, posts/, ... # App Router routes
 ```
 
 ### Particle System (JavaScript)
 ```
 public/js/particles/
 ├── main.js                  # Entry point, initializes system
-├── particleSystem.js        # Core system logic (~1200 lines)
+├── particleSystem.js        # Core system logic (~600 lines)
 ├── particle.js              # Individual particle behavior
 ├── settingsManager.js       # Configuration management
 ├── uiController.js          # UI controls/settings panel
@@ -75,7 +75,7 @@ public/js/particles/
 ## Key Files Deep Dive
 
 ### `particleSystem.js`
-- **Main class**: `ParticleSystem` (~1200 lines)
+- **Main class**: `ParticleSystem` (~600 lines)
 - **Key methods**:
   - `updateAndDrawMouseEffects()`: Handles hold effects and aura rendering
   - `applyMouseForce()`: Mouse interaction physics
