@@ -2,10 +2,10 @@ name: zig physics
 
 on:
   pull_request:
-    paths: ["zig/**", "public/js/particles/**"]
+    paths: ["zig/**", "src/particles/**"]
   push:
     branches: [main]
-    paths: ["zig/**", "public/js/particles/**"]
+    paths: ["zig/**", "src/particles/**"]
 
 permissions:
   contents: read
@@ -24,4 +24,4 @@ jobs:
       - name: committed wasm is up to date
         run: |
           cd zig && zig build wasm && cd ..
-          git diff --exit-code public/js/particles/physics.wasm public/js/particles/physics-nosimd.wasm
+          git diff --exit-code src/particles/physics.wasm src/particles/physics-nosimd.wasm

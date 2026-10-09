@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) void {
     // physics.wasm: current browsers, with simd128 (safari 16.4+, chrome and
     // firefox 91+). physics-nosimd.wasm: the same code for the baseline wasm
     // every browser since 2017 runs.
-    const step = b.step("wasm", "build public/js/particles/physics{,-nosimd}.wasm");
+    const step = b.step("wasm", "build src/particles/physics{,-nosimd}.wasm");
     addWasm(b, step, "physics", &std.Target.wasm.cpu.generic, &.{.simd128});
     addWasm(b, step, "physics-nosimd", &std.Target.wasm.cpu.mvp, &.{});
     b.getInstallStep().dependOn(step);
@@ -43,6 +43,6 @@ fn addWasm(
     });
     wasm.entry = .disabled;
     wasm.rdynamic = true;
-    const install = b.addInstallFile(wasm.getEmittedBin(), b.fmt("../../public/js/particles/{s}.wasm", .{name}));
+    const install = b.addInstallFile(wasm.getEmittedBin(), b.fmt("../../src/particles/{s}.wasm", .{name}));
     step.dependOn(&install.step);
 }

@@ -1,17 +1,37 @@
-import * as THREE from 'three';
+import * as THREE from "three";
+import type { Settings } from "./config";
+import type { ParticleStore } from "./particleStore";
 
 const MAX_PARTICLES = 50000;
 const MAX_CONNECTIONS = 200000;
 
 // Flag a buffer attribute for upload, limited to its first `count` floats.
-function markRange(attr, count) {
+function markRange(attr: THREE.BufferAttribute, count: number) {
 	attr.clearUpdateRanges();
 	attr.addUpdateRange(0, count);
 	attr.needsUpdate = true;
 }
 
+type PointsMesh = THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
+type LinesMesh = THREE.LineSegments<THREE.BufferGeometry, THREE.ShaderMaterial>;
+
+// The particle geometry's attribute, as the BufferAttribute this file made it.
+function attr(geo: THREE.BufferGeometry, name: string) {
+	return geo.getAttribute(name) as THREE.BufferAttribute;
+}
+
 export class WebGLParticleRenderer {
-	constructor(width, height) {
+	width: number;
+	height: number;
+	renderer: THREE.WebGLRenderer;
+	domElement: HTMLCanvasElement;
+	scene: THREE.Scene;
+	camera: THREE.OrthographicCamera;
+	particlesMesh!: PointsMesh;
+	connectionsMesh!: LinesMesh;
+	private storeVersion = -1;
+
+	constructor(width: number, height: number) {
 		this.width = width;
 		this.height = height;
 
@@ -43,9 +63,9 @@ export class WebGLParticleRenderer {
 		const colors = new Float32Array(MAX_PARTICLES * 3);
 		const sizes = new Float32Array(MAX_PARTICLES);
 
-		geo.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
-		geo.setAttribute('customColor', new THREE.BufferAttribute(colors, 3).setUsage(THREE.DynamicDrawUsage));
-		geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1).setUsage(THREE.DynamicDrawUsage));
+		geo.setAttribute("position", new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
+		geo.setAttribute("customColor", new THREE.BufferAttribute(colors, 3).setUsage(THREE.DynamicDrawUsage));
+		geo.setAttribute("size", new THREE.BufferAttribute(sizes, 1).setUsage(THREE.DynamicDrawUsage));
 		geo.setDrawRange(0, 0);
 
 		// Bubble shader — smooth, uniform, no per-particle randomness.
@@ -105,9 +125,9 @@ export class WebGLParticleRenderer {
 		const alphas = new Float32Array(MAX_CONNECTIONS * 2);
 		const endpointColors = new Float32Array(MAX_CONNECTIONS * 2 * 3);
 
-		geo.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
-		geo.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1).setUsage(THREE.DynamicDrawUsage));
-		geo.setAttribute('endpointColor', new THREE.BufferAttribute(endpointColors, 3).setUsage(THREE.DynamicDrawUsage));
+		geo.setAttribute("position", new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
+		geo.setAttribute("alpha", new THREE.BufferAttribute(alphas, 1).setUsage(THREE.DynamicDrawUsage));
+		geo.setAttribute("endpointColor", new THREE.BufferAttribute(endpointColors, 3).setUsage(THREE.DynamicDrawUsage));
 		geo.setDrawRange(0, 0);
 
 		// Connections blend each endpoint's particle color with the base connection tint —
@@ -148,9 +168,9 @@ export class WebGLParticleRenderer {
 		this.scene.add(this.connectionsMesh);
 	}
 
-	updateParticles(s, count) {
+	updateParticles(s: ParticleStore, count: number) {
 		const geo = this.particlesMesh.geometry;
-		const posArr = geo.getAttribute('position').array;
+		const posArr = attr(geo, "position").array;
 		const xs = s.x;
 		const ys = s.y;
 		for (let i = 0; i < count; i++) {
@@ -159,17 +179,17 @@ export class WebGLParticleRenderer {
 		}
 		// Upload only the live range. Without update ranges three.js re-sends
 		// the whole MAX_PARTICLES buffer every frame.
-		markRange(geo.getAttribute('position'), count * 3);
+		markRange(attr(geo, "position"), count * 3);
 
 		// Color and size change only on spawn or a settings change.
-		if (s.version !== this._storeVersion) {
-			this._storeVersion = s.version;
-			const colArr = geo.getAttribute('customColor').array;
+		if (s.version !== this.storeVersion) {
+			this.storeVersion = s.version;
+			const colArr = attr(geo, "customColor").array;
 			const { color, palette } = s;
 			for (let i = 0; i < count; i++) colArr.set(palette[color[i]], i * 3);
-			geo.getAttribute('size').array.set(s.radius.subarray(0, count));
-			markRange(geo.getAttribute('customColor'), count * 3);
-			markRange(geo.getAttribute('size'), count);
+			attr(geo, "size").array.set(s.radius.subarray(0, count));
+			markRange(attr(geo, "customColor"), count * 3);
+			markRange(attr(geo, "size"), count);
 		}
 		geo.setDrawRange(0, count);
 	}
@@ -177,7 +197,13 @@ export class WebGLParticleRenderer {
 	// Upload pre-built connection buffer (built during physics pass to avoid double iteration).
 	// connColor: per-endpoint RGB (Float32Array, length vertCount*3) — each line endpoint
 	// carries its source particle's color so connections gradient between bubbles.
-	uploadConnections(connPos, connAlpha, connColor, vertCount, settings) {
+	uploadConnections(
+		connPos: Float32Array,
+		connAlpha: Float32Array,
+		connColor: Float32Array,
+		vertCount: number,
+		settings: Settings,
+	) {
 		const geo = this.connectionsMesh.geometry;
 
 		if (vertCount === 0) {
@@ -192,17 +218,17 @@ export class WebGLParticleRenderer {
 			parseInt(cc.slice(5, 7), 16) / 255,
 		);
 
-		const posArr = geo.getAttribute('position').array;
-		const alphaArr = geo.getAttribute('alpha').array;
-		const colArr = geo.getAttribute('endpointColor').array;
+		const posArr = attr(geo, "position").array;
+		const alphaArr = attr(geo, "alpha").array;
+		const colArr = attr(geo, "endpointColor").array;
 
 		posArr.set(connPos.subarray(0, vertCount * 3));
 		alphaArr.set(connAlpha.subarray(0, vertCount));
 		colArr.set(connColor.subarray(0, vertCount * 3));
 
-		markRange(geo.getAttribute('position'), vertCount * 3);
-		markRange(geo.getAttribute('alpha'), vertCount);
-		markRange(geo.getAttribute('endpointColor'), vertCount * 3);
+		markRange(attr(geo, "position"), vertCount * 3);
+		markRange(attr(geo, "alpha"), vertCount);
+		markRange(attr(geo, "endpointColor"), vertCount * 3);
 		geo.setDrawRange(0, vertCount);
 	}
 
@@ -210,7 +236,7 @@ export class WebGLParticleRenderer {
 		this.renderer.render(this.scene, this.camera);
 	}
 
-	resize(width, height) {
+	resize(width: number, height: number) {
 		this.width = width;
 		this.height = height;
 		this.renderer.setSize(width, height);

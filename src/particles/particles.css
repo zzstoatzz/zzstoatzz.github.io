@@ -1,4 +1,4 @@
-/* particle settings panel and controls (loaded by uiController.js and app/layout.tsx) */
+/* particle settings panel, shape dock and best-hold badge (imported by app/layout.tsx) */
 .particle-controls {
     position: fixed;
     top: 1rem;
@@ -518,4 +518,194 @@
 		top: calc(10px + env(safe-area-inset-top, 0px)) !important;
 		right: 10px !important;
 	}
+}
+
+/* best hold time, bottom-right (mouseEffects.ts) */
+#ghost-leaderboard {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    pointer-events: none;
+    font-family: monospace;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(0, 0, 0, 0.5);
+    padding: 8px 12px;
+    border-radius: 6px;
+    z-index: 10000;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: all 0.3s ease;
+    opacity: 0;
+}
+#ghost-leaderboard.visible { opacity: 1; }
+
+/* shape placement dock (shapeEditor.ts) */
+.shape-dock {
+    position: fixed !important;
+    bottom: max(20px, env(safe-area-inset-bottom, 0px)) !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    display: none;
+    align-items: center !important;
+    gap: 10px !important;
+    padding: 7px !important;
+    max-width: calc(100vw - 24px) !important;
+    background: rgba(22, 26, 31, 0.72) !important;
+    border: 1px solid rgba(255, 255, 255, 0.09) !important;
+    border-radius: 16px !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45) !important;
+    font-family: var(--font-fira-code), monospace !important;
+    z-index: 9999 !important;
+    touch-action: manipulation !important;
+}
+.shape-dock.open { display: flex !important; }
+
+.shape-dock button {
+    flex: none !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 42px !important;
+    height: 38px !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 9px !important;
+    color: rgba(255, 255, 255, 0.5) !important;
+    cursor: pointer !important;
+    transition: color 0.15s ease, background 0.15s ease !important;
+}
+.shape-dock button:hover { color: rgba(255, 255, 255, 0.9) !important; }
+
+/* Segmented control: one track, a single sliding selection. */
+.shape-seg {
+    flex: none !important;
+    display: flex !important;
+    gap: 2px !important;
+    padding: 3px !important;
+    background: rgba(255, 255, 255, 0.07) !important;
+    border-radius: 11px !important;
+}
+.shape-seg button.selected {
+    color: #0b1417 !important;
+    background: #64ffda !important;
+}
+
+.shape-divider {
+    flex: none !important;
+    width: 1px !important;
+    height: 22px !important;
+    background: rgba(255, 255, 255, 0.12) !important;
+}
+
+.shape-dock .disc {
+    display: block !important;
+    flex: none !important;
+    width: 24px !important;
+    height: 24px !important;
+    border-radius: 50% !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.35) !important;
+    box-shadow: inset 0 0 0 2px rgba(22, 26, 31, 0.9) !important;
+    transition: background 0.15s ease !important;
+}
+/* Anchors the popover over the well it belongs to, not over the dock. */
+.color-slot { position: relative !important; flex: none !important; display: flex !important; }
+.color-well {
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 50% !important;
+}
+.color-well.on { background: rgba(255, 255, 255, 0.1) !important; }
+.disc.none {
+    background:
+        linear-gradient(45deg, transparent 43%, rgba(255,255,255,0.55) 43%, rgba(255,255,255,0.55) 57%, transparent 57%),
+        rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Colour popover: no-fill, or the system colour wheel. */
+.color-pop {
+    position: absolute !important;
+    bottom: calc(100% + 10px) !important;
+    left: 50% !important;
+    transform: translateX(-50%) translateY(4px) !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    padding: 7px !important;
+    background: rgba(28, 33, 39, 0.86) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 14px !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5) !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: opacity 0.16s ease, transform 0.16s ease !important;
+}
+.color-pop.open {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: translateX(-50%) translateY(0) !important;
+}
+.color-pop .wheel {
+    position: relative !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 42px !important;
+    height: 38px !important;
+    border-radius: 9px !important;
+    cursor: pointer !important;
+}
+.color-pop .wheel:hover { background: rgba(255, 255, 255, 0.08) !important; }
+.color-pop .wheel input {
+    position: absolute !important;
+    inset: 0 !important;
+    opacity: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    cursor: pointer !important;
+    border: none !important;
+    padding: 0 !important;
+}
+.color-pop .wheel .disc {
+    background: conic-gradient(#ff6b6b, #ffb86c, #f8f38d, #42b883, #00bfff, #bd93f9, #ff79c6, #ff6b6b) !important;
+}
+.color-pop button.selected .disc, .color-pop .wheel.selected .disc {
+    box-shadow: inset 0 0 0 2px rgba(28, 33, 39, 0.95), 0 0 0 2px #64ffda !important;
+}
+
+/* Transient caption, so the gestures are discoverable without permanent chrome. */
+.shape-caption {
+    position: fixed !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    bottom: calc(max(20px, env(safe-area-inset-bottom, 0px)) + 64px) !important;
+    padding: 6px 12px !important;
+    background: rgba(22, 26, 31, 0.72) !important;
+    border-radius: 999px !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    font-family: var(--font-fira-code), monospace !important;
+    font-size: 11px !important;
+    letter-spacing: 0.3px !important;
+    color: rgba(255, 255, 255, 0.6) !important;
+    white-space: nowrap !important;
+    z-index: 9998 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: opacity 0.4s ease !important;
+}
+.shape-caption.show { opacity: 1 !important; }
+
+.shape-dock .dock-edit-only { display: none !important; }
+.shape-dock .dock-edit-only.on { display: flex !important; }
+
+@media (max-width: 640px) {
+    .shape-dock { gap: 8px !important; }
+    .shape-dock button { width: 40px !important; }
+    .shape-caption { font-size: 10px !important; }
 }

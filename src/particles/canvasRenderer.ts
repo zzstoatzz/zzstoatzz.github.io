@@ -1,18 +1,18 @@
-// Canvas 2D renderer for particles and connections.
-// Extracted from particleSystem.js — serves as fallback when WebGL is unavailable.
+// Canvas 2D renderer for particles and connections, used when WebGL is
+// unavailable.
+import type { Settings } from "./config";
+import type { ParticleStore } from "./particleStore";
 
 export class CanvasRenderer {
-	constructor(ctx) {
-		this.ctx = ctx;
-	}
+	constructor(private ctx: CanvasRenderingContext2D) {}
 
-	clear(width, height) {
+	clear(width: number, height: number) {
 		this.ctx.clearRect(0, 0, width, height);
 	}
 
-	// Draw all particles from the store, batched by color for efficiency.
-	drawParticles(s, count) {
-		const byColor = new Map();
+	// Draw all particles from the store, batched by color.
+	drawParticles(s: ParticleStore, count: number) {
+		const byColor = new Map<number, number[]>();
 		for (let i = 0; i < count; i++) {
 			const c = s.color[i];
 			let batch = byColor.get(c);
@@ -39,30 +39,31 @@ export class CanvasRenderer {
 
 	// Draw the connection lines the physics step built: vertex pairs of
 	// (x, y, z) in pos with one alpha per vertex, batched by rounded opacity.
-	drawConnections(pos, alpha, vertCount, settings) {
+	drawConnections(pos: Float32Array, alpha: Float32Array, vertCount: number, settings: Settings) {
 		if (vertCount === 0) return;
 
 		this.ctx.strokeStyle = settings.CONNECTION_COLOR;
 		this.ctx.lineWidth = settings.CONNECTION_WIDTH || 1;
 
-		const linesByOpacity = {};
+		const linesByOpacity = new Map<number, number[]>();
 		for (let v = 0; v < vertCount; v += 2) {
-			const opacityKey = Math.round(alpha[v] * 20) / 20;
-			if (!linesByOpacity[opacityKey]) linesByOpacity[opacityKey] = [];
+			const opacity = Math.round(alpha[v] * 20) / 20;
+			let lines = linesByOpacity.get(opacity);
+			if (!lines) {
+				lines = [];
+				linesByOpacity.set(opacity, lines);
+			}
 			const k = v * 3;
-			linesByOpacity[opacityKey].push(pos[k], pos[k + 1], pos[k + 3], pos[k + 4]);
+			lines.push(pos[k], pos[k + 1], pos[k + 3], pos[k + 4]);
 		}
 
-		for (const opacityKey in linesByOpacity) {
-			this.ctx.globalAlpha = Number.parseFloat(opacityKey);
+		for (const [opacity, lines] of linesByOpacity) {
+			this.ctx.globalAlpha = opacity;
 			this.ctx.beginPath();
-
-			const lines = linesByOpacity[opacityKey];
 			for (let k = 0; k < lines.length; k += 4) {
 				this.ctx.moveTo(lines[k], lines[k + 1]);
 				this.ctx.lineTo(lines[k + 2], lines[k + 3]);
 			}
-
 			this.ctx.stroke();
 		}
 

@@ -1,8 +1,8 @@
-// Offline support for the installed app. Pages and unhashed assets (the
-// particle js and wasm) are network-first so a deploy shows up right away;
-// next's hashed bundles and the pinned three.js never change, so they are
-// served from cache once seen.
-const CACHE = "n8-v1";
+// Offline support for the installed app. Pages and other unhashed files are
+// network-first so a deploy shows up right away; next's hashed bundles
+// (including three.js and the physics wasm) never change, so they are served
+// from cache once seen.
+const CACHE = "n8-v2";
 const SHELL = ["/", "/manifest.webmanifest", "/assets/images/stoat-192.png"];
 
 self.addEventListener("install", (e) => {
@@ -19,14 +19,13 @@ self.addEventListener("activate", (e) => {
 	);
 });
 
-const immutable = (url) =>
-	url.pathname.startsWith("/_next/static/") || url.href.startsWith("https://cdn.jsdelivr.net/npm/three@");
+const immutable = (url) => url.origin === self.location.origin && url.pathname.startsWith("/_next/static/");
 
 self.addEventListener("fetch", (e) => {
 	const req = e.request;
 	if (req.method !== "GET") return;
 	const url = new URL(req.url);
-	if (url.origin !== self.location.origin && !immutable(url)) return;
+	if (url.origin !== self.location.origin) return;
 
 	if (immutable(url)) {
 		e.respondWith(

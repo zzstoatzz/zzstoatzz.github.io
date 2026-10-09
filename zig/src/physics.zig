@@ -1,6 +1,6 @@
 //! the homepage particle physics: spatial hash, pair attraction and the
 //! connection-line buffer, soft walls, mouse force, particle update and shape
-//! collisions. js (public/js/particles) keeps rendering, ui, mouse visuals and
+//! collisions. typescript (src/particles) keeps rendering, ui, mouse visuals and
 //! shape geometry, and reads and writes the particle columns directly.
 //!
 //! this was ported bit-for-bit from an earlier js implementation, which is

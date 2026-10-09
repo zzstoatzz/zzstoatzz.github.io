@@ -4,21 +4,96 @@
 //
 // The wasm module owns the particle state: once attached, the ParticleStore's
 // arrays are views into wasm memory, so a step is one call with no copying.
+import type { ParticleStore } from "./particleStore";
+import type { ParticleSystem } from "./particleSystem";
+
+// zig/src/wasm.zig. Pointers are byte offsets into memory; bools come back as 0/1.
+export interface PhysicsExports {
+	memory: WebAssembly.Memory;
+	setCount(n: number): number;
+	xPtr(): number;
+	yPtr(): number;
+	vxPtr(): number;
+	vyPtr(): number;
+	radiusPtr(): number;
+	massPtr(): number;
+	sizeVarPtr(): number;
+	colorPtr(): number;
+	palettePtr(): number;
+	connPosPtr(): number;
+	connAlphaPtr(): number;
+	connColorPtr(): number;
+	connVerts(): number;
+	setSettings(
+		interactionRadius: number,
+		attract: number,
+		smoothing: number,
+		connectionOpacity: number,
+		gravity: number,
+		drag: number,
+		elasticity: number,
+		width: number,
+		height: number,
+		buildConnections: boolean,
+	): void;
+	setMouse(
+		active: boolean,
+		x: number,
+		y: number,
+		radius: number,
+		force: number,
+		vortex: boolean,
+		down: boolean,
+		spinning: boolean,
+		vortexIntensity: number,
+		speedMultiplier: number,
+	): void;
+	setShapeCount(n: number): number;
+	setShape(
+		k: number,
+		circle: boolean,
+		x: number,
+		y: number,
+		r: number,
+		sides: number,
+		...planes: number[] // 8 normal components, then 4 offsets
+	): void;
+	seed(s: number): void;
+	step(deltaMs: number): number;
+}
+
+// The connection lines built by the last step: vertex pairs with (x, y, z)
+// positions, one alpha and an rgb color per vertex.
+export interface Connections {
+	pos: Float32Array;
+	alpha: Float32Array;
+	color: Float32Array;
+	verts: number;
+}
+
+export const NO_CONNECTIONS: Connections = {
+	pos: new Float32Array(0),
+	alpha: new Float32Array(0),
+	color: new Float32Array(0),
+	verts: 0,
+};
+
+const MAX_CONNECTIONS = 200000;
 
 // Inputs to the mouse force, from the hold/release state in mouseEffects.
-function mouseParams(ps, now) {
+function mouseParams(ps: ParticleSystem, now: number) {
 	ps.mouseEffects.checkReleaseExpiry();
 	const fx = ps.mouseEffects;
 	const active = ps.isMouseDown || fx.releaseMultiplier > 1;
-	const settings = ps._settings;
+	const settings = ps.settings;
 	const out = {
 		active,
 		x: ps.mouseX,
 		y: ps.mouseY,
 		radius: 0,
 		force: 0,
-		vortex: !!settings.ENABLE_VORTEX_FORCE,
-		down: !!ps.isMouseDown,
+		vortex: settings.ENABLE_VORTEX_FORCE,
+		down: ps.isMouseDown,
 		spinning: false,
 		vortexIntensity: 0,
 		speedMultiplier: 1,
@@ -60,52 +135,57 @@ const SIMD_PROBE = new Uint8Array([
 ]);
 
 export class WasmPhysics {
+	private w: PhysicsExports;
+	private conn: (Connections & { buffer: ArrayBuffer }) | null = null;
+
 	// physics.wasm uses simd128 (safari 16.4+, chrome/firefox 91+); older
-	// engines get the same physics built without it.
-	static async load() {
-		const name = WebAssembly.validate(SIMD_PROBE) ? "physics.wasm" : "physics-nosimd.wasm";
-		const url = new URL(`./${name}`, import.meta.url);
+	// engines get the same physics built without it. Each URL is spelled out
+	// so the bundler can find and emit both files.
+	static async load(): Promise<WasmPhysics> {
+		const url = WebAssembly.validate(SIMD_PROBE)
+			? new URL("./physics.wasm", import.meta.url)
+			: new URL("./physics-nosimd.wasm", import.meta.url);
 		const res = await fetch(url);
 		const bytes = await res.arrayBuffer();
 		return WasmPhysics.fromBytes(bytes);
 	}
 
-	static async fromBytes(bytes) {
+	static async fromBytes(bytes: BufferSource): Promise<WasmPhysics> {
 		const { instance } = await WebAssembly.instantiate(bytes, {});
-		return new WasmPhysics(instance.exports);
+		return new WasmPhysics(instance.exports as unknown as PhysicsExports);
 	}
 
-	constructor(exports) {
+	constructor(exports: PhysicsExports) {
 		this.w = exports;
 		this.w.seed((Math.random() * 2 ** 32) >>> 0);
-		this._conn = null;
 	}
 
 	// Move the store's particles (and palette) into wasm memory.
-	attach(store) {
+	attach(store: ParticleStore) {
 		store.attach(this.w);
 	}
 
 	// Connection buffer views, rebuilt if wasm memory moved.
-	_connViews() {
+	private connViews() {
 		const w = this.w;
-		const buf = w.memory.buffer;
-		if (this._conn?.buffer !== buf) {
-			this._conn = {
-				buffer: buf,
-				pos: new Float32Array(buf, w.connPosPtr(), 200000 * 2 * 3),
-				alpha: new Float32Array(buf, w.connAlphaPtr(), 200000 * 2),
-				color: new Float32Array(buf, w.connColorPtr(), 200000 * 2 * 3),
+		const buffer = w.memory.buffer;
+		if (this.conn?.buffer !== buffer) {
+			this.conn = {
+				buffer,
+				pos: new Float32Array(buffer, w.connPosPtr(), MAX_CONNECTIONS * 2 * 3),
+				alpha: new Float32Array(buffer, w.connAlphaPtr(), MAX_CONNECTIONS * 2),
+				color: new Float32Array(buffer, w.connColorPtr(), MAX_CONNECTIONS * 2 * 3),
+				verts: 0,
 			};
 		}
-		return this._conn;
+		return this.conn;
 	}
 
 	// One physics step for the given system, whose store must be attached to
 	// this module.
-	step(ps, deltaTime, now = performance.now()) {
+	step(ps: ParticleSystem, deltaTime: number, now = performance.now()) {
 		const w = this.w;
-		const s = ps._settings;
+		const s = ps.settings;
 		w.setSettings(
 			s.INTERACTION_RADIUS,
 			s.ATTRACT,
@@ -113,7 +193,7 @@ export class WasmPhysics {
 			s.CONNECTION_OPACITY,
 			s.GRAVITY || 0,
 			s.DRAG || 0.01,
-			s.ELASTICITY !== undefined ? s.ELASTICITY : 0.8,
+			s.ELASTICITY,
 			ps.canvas.width,
 			ps.canvas.height,
 			true, // build connection lines (both renderers draw them)
@@ -135,14 +215,11 @@ export class WasmPhysics {
 		const m = mouseParams(ps, now);
 		w.setMouse(m.active, m.x, m.y, m.radius, m.force, m.vortex, m.down, m.spinning, m.vortexIntensity, m.speedMultiplier);
 
-		ps.deltaTime = deltaTime / 1000.0;
 		if (!w.step(deltaTime)) throw new Error("wasm physics: step failed");
 		ps.store.sync();
 
-		const conn = this._connViews();
-		ps._connPos = conn.pos;
-		ps._connAlpha = conn.alpha;
-		ps._connColor = conn.color;
-		ps._connVertCount = w.connVerts();
+		const conn = this.connViews();
+		conn.verts = w.connVerts();
+		ps.connections = conn;
 	}
 }

@@ -1,26 +1,24 @@
-import { RANGES } from "./config.js";
+// The settings panel: a gear icon that opens sliders, color pickers and
+// toggles for every setting, plus reset/share and the shape tools. Styles are
+// in particles.css.
+import type { SettingKey, Settings } from "./config";
+import { RANGES } from "./config";
+import type { ParticleSystem } from "./particleSystem";
+
+type SettingChange = <K extends SettingKey>(key: K, value: Settings[K]) => void;
 
 export class UIController {
-	constructor(onSettingChange, initialSettings) {
-		this.onSettingChange = onSettingChange;
-		this.controls = {};
-		this.currentSettings = { ...initialSettings };
+	private particleControls: HTMLElement | null = null;
+	private settingsIcon: HTMLElement | null = null;
 
-		this.injectStyles();
+	constructor(
+		private system: ParticleSystem,
+		private onSettingChange: SettingChange,
+		initialSettings: Settings,
+	) {
 		this.initControls();
 		this.bindEvents();
 		this.updateUI(initialSettings);
-	}
-
-	// The panel styles live in particles.css. The site layout links it up front
-	// (same id) so the panel never flashes unstyled; this covers other hosts.
-	injectStyles() {
-		if (document.getElementById('particle-settings-styles')) return;
-		const link = document.createElement('link');
-		link.id = 'particle-settings-styles';
-		link.rel = 'stylesheet';
-		link.href = new URL('./particles.css', import.meta.url).href;
-		document.head.appendChild(link);
 	}
 
 	initControls() {
@@ -46,22 +44,9 @@ export class UIController {
 			document.body.appendChild(settingsIcon);
 		}
 
-		// Store references to sliders, buttons, value displays
-		this.configToggleButton = document.getElementById("configToggle");
-		this.controlsContent = document.getElementById("controlsContent");
-		this.particleControls = document.querySelector(".particle-controls");
+		this.particleControls = document.querySelector<HTMLElement>(".particle-controls");
 		this.settingsIcon = document.getElementById("settings-icon");
 
-		// Get all sliders and their value displays
-		for (const key in RANGES) {
-			this.controls[key] = document.getElementById(key);
-			this.controls[`${key}_VALUE`] = document.getElementById(`${key}_VALUE`);
-		}
-
-		// Special controls
-		this.resetDefaultsButton = document.getElementById("resetDefaults");
-		this.generateShareLinkButton = document.getElementById("generateShareLink");
-		
 		// Start with controls hidden
 		if (this.particleControls) {
 			this.particleControls.style.display = "none";
@@ -90,7 +75,7 @@ export class UIController {
 		let html = '';
 
 		// Group controls by category with updated names and added ELASTICITY
-		const categories = {
+		const categories: Record<string, SettingKey[]> = {
 			'particles': ['PARTICLE_COUNT', 'AVERAGE_PARTICLE_SIZE', 'DRAG', 'ELASTICITY'],
 			'forces': ['GRAVITY', 'ATTRACT', 'SMOOTHING_FACTOR', 'EXPLOSION_RADIUS', 'EXPLOSION_FORCE', 'ENABLE_VORTEX_FORCE'],
 			'color': ['PARTICLE_SINGLE_COLOR', 'PARTICLE_COLOR'],
@@ -185,40 +170,25 @@ export class UIController {
 		// Get all settings sliders and add direct event listeners
 		// Scoped to the panel: other components (the shape dock) also put
 		// inputs in the document, and a bare selector would hijack them.
-		const allRangeInputs = document.querySelectorAll('.particle-controls input[type="range"]');
+		const allRangeInputs = document.querySelectorAll<HTMLInputElement>('.particle-controls input[type="range"]');
 		
 		for (const input of allRangeInputs) {
 			// Extract key from ID
-			const key = input.id;
+			const key = input.id as SettingKey;
 			if (!key) continue;
-			
-			// Function to handle input changes
-			const handleChange = (e) => {
-				let value = e.target.value;
-				
-				// Convert to number for most controls
-				if (key !== "CONNECTION_COLOR") {
-					value = Number.parseFloat(value);
-					if (Number.isNaN(value)) return;
-				}
-				
-				// Update settings
+
+			const handleChange = () => {
+				const value = Number.parseFloat(newInput.value);
+				if (Number.isNaN(value)) return;
 				this.onSettingChange(key, value);
-				
-				// Update display value directly
+
 				const valueDisplay = document.getElementById(`${key}_VALUE`);
-				if (valueDisplay) {
-					if (typeof value === "number") {
-						valueDisplay.textContent = value.toString();
-					} else {
-						valueDisplay.textContent = value;
-					}
-				}
+				if (valueDisplay) valueDisplay.textContent = value.toString();
 			};
-			
+
 			// Remove existing handlers by cloning
-			const newInput = input.cloneNode(true);
-			input.parentNode.replaceChild(newInput, input);
+			const newInput = input.cloneNode(true) as HTMLInputElement;
+			input.replaceWith(newInput);
 			
 			// Add handlers to the new element
 			newInput.addEventListener('input', handleChange);
@@ -232,15 +202,15 @@ export class UIController {
 		}
 		
 		// Set up special controls: color pickers
-		for (const colorKey of ["CONNECTION_COLOR", "PARTICLE_COLOR"]) {
+		for (const colorKey of ["CONNECTION_COLOR", "PARTICLE_COLOR"] as const) {
 			const colorPicker = document.getElementById(colorKey);
 			if (!colorPicker) continue;
-			const handleColorChange = (e) => {
-				const value = e.target.value;
+			const handleColorChange = () => {
+				const value = newColorPicker.value;
 				this.onSettingChange(colorKey, value);
 
 				// picking a particle color means you want one color
-				const single = document.getElementById("PARTICLE_SINGLE_COLOR");
+				const single = document.getElementById("PARTICLE_SINGLE_COLOR") as HTMLInputElement | null;
 				if (colorKey === "PARTICLE_COLOR" && single && !single.checked) {
 					single.checked = true;
 					this.onSettingChange("PARTICLE_SINGLE_COLOR", true);
@@ -252,8 +222,8 @@ export class UIController {
 				}
 			};
 
-			const newColorPicker = colorPicker.cloneNode(true);
-			colorPicker.parentNode.replaceChild(newColorPicker, colorPicker);
+			const newColorPicker = colorPicker.cloneNode(true) as HTMLInputElement;
+			colorPicker.replaceWith(newColorPicker);
 			
 			newColorPicker.addEventListener('input', handleColorChange);
 			newColorPicker.addEventListener('change', handleColorChange);
@@ -263,15 +233,15 @@ export class UIController {
 		}
 		
 		// Checkbox controls
-		for (const checkboxKey of ["ENABLE_VORTEX_FORCE", "PARTICLE_SINGLE_COLOR"]) {
+		for (const checkboxKey of ["ENABLE_VORTEX_FORCE", "PARTICLE_SINGLE_COLOR"] as const) {
 			const checkbox = document.getElementById(checkboxKey);
 			if (!checkbox) continue;
-			const handleCheckboxChange = (e) => {
-				this.onSettingChange(checkboxKey, e.target.checked);
+			const handleCheckboxChange = () => {
+				this.onSettingChange(checkboxKey, newCheckbox.checked);
 			};
 
-			const newCheckbox = checkbox.cloneNode(true);
-			checkbox.parentNode.replaceChild(newCheckbox, checkbox);
+			const newCheckbox = checkbox.cloneNode(true) as HTMLInputElement;
+			checkbox.replaceWith(newCheckbox);
 
 			newCheckbox.addEventListener('change', handleCheckboxChange);
 			newCheckbox.addEventListener('touchstart', (e) => {
@@ -297,7 +267,7 @@ export class UIController {
 		if (configToggle && this.particleControls) {
 			// Clone to remove existing listeners
 			const newToggle = configToggle.cloneNode(true);
-			configToggle.parentNode.replaceChild(newToggle, configToggle);
+			configToggle.replaceWith(newToggle);
 			
 			newToggle.addEventListener('click', () => {
 				this.hideControlPanel();
@@ -310,80 +280,36 @@ export class UIController {
 			}, { passive: false });
 		}
 		
-		// Reset button
-		const resetButton = document.getElementById("resetDefaults");
-		if (resetButton) {
-			resetButton.addEventListener('click', () => {
-				// Use reset function from parent particleSystem
-				if (window.particleSystem) {
-					window.particleSystem.settingsManager.resetToDefaults();
-					
-					// Update all sliders and displays to match default values
-					const defaults = window.particleSystem.settingsManager.getAllSettings();
-					this.updateUI(defaults);
-					
-					this.showSuccessMessage("settings reset to defaults");
-				}
-			});
-			
-			// Also add touch event
-			resetButton.addEventListener('touchend', (e) => {
+		// Panel buttons. touchend fires before the synthetic click, so it
+		// prevents that click and runs the action itself.
+		const onTap = (id: string, action: () => void) => {
+			const button = document.getElementById(id);
+			if (!button) return;
+			button.addEventListener('click', action);
+			button.addEventListener('touchend', (e) => {
 				e.preventDefault();
-				// Same reset logic
-				if (window.particleSystem) {
-					window.particleSystem.settingsManager.resetToDefaults();
-					const defaults = window.particleSystem.settingsManager.getAllSettings();
-					this.updateUI(defaults);
-					this.showSuccessMessage("settings reset to defaults");
-				}
+				action();
 			}, { passive: false });
-		}
-		
-		// Share link button
-		const shareButton = document.getElementById("generateShareLink");
-		if (shareButton) {
-			shareButton.addEventListener('click', () => {
-				// Get share link from parent particleSystem
-				if (window.particleSystem) {
-					const shareLink = window.particleSystem.settingsManager.generateShareLink();
-					this.copyToClipboard(shareLink);
-					this.showSuccessMessage("link copied to clipboard");
-				}
-			});
-			
-			// Also add touch event
-			shareButton.addEventListener('touchend', (e) => {
-				e.preventDefault();
-				if (window.particleSystem) {
-					const shareLink = window.particleSystem.settingsManager.generateShareLink();
-					this.copyToClipboard(shareLink);
-					this.showSuccessMessage("link copied to clipboard");
-				}
-			}, { passive: false });
-		}
-		
-		// Randomize colors button
-		const randomizeButton = document.getElementById("randomizeColors");
-		if (randomizeButton) {
-			randomizeButton.addEventListener('click', () => {
-				if (window.particleSystem) {
-					window.particleSystem.randomizeColors();
-					this.showSuccessMessage("colors randomized");
-				}
-			});
-			
-			// Also add touch event
-			randomizeButton.addEventListener('touchend', (e) => {
-				e.preventDefault();
-				if (window.particleSystem) {
-					window.particleSystem.randomizeColors();
-					this.showSuccessMessage("colors randomized");
-				}
-			}, { passive: false });
-		}
-		
+		};
+
+		onTap("resetDefaults", () => {
+			this.system.settingsManager.resetToDefaults();
+			this.updateUI(this.system.settingsManager.getAllSettings());
+			this.showSuccessMessage("settings reset to defaults");
+		});
+
+		onTap("generateShareLink", () => {
+			this.copyToClipboard(this.system.settingsManager.generateShareLink());
+			this.showSuccessMessage("link copied to clipboard");
+		});
+
+		onTap("randomizeColors", () => {
+			this.system.randomizeColors();
+			this.showSuccessMessage("colors randomized");
+		});
+
 		// Accordion sections — one open at a time
-		for (const toggle of document.querySelectorAll('.section-toggle')) {
+		for (const toggle of document.querySelectorAll<HTMLElement>('.section-toggle')) {
 			toggle.addEventListener('click', () => {
 				const wasOpen = toggle.getAttribute('aria-expanded') === 'true';
 				for (const other of document.querySelectorAll('.section-toggle')) {
@@ -405,8 +331,7 @@ export class UIController {
 		const shapeModeButton = document.getElementById("toggleShapeMode");
 		if (shapeModeButton) {
 			shapeModeButton.addEventListener('click', () => {
-				const editor = window.particleSystem?.shapeEditor;
-				if (!editor) return;
+				const editor = this.system.shapeEditor;
 				editor.toggle();
 				this.setShapeModeActive(editor.active);
 				// Get the panel out of the way so the whole canvas is placeable.
@@ -417,8 +342,7 @@ export class UIController {
 		const clearShapesButton = document.getElementById("clearShapes");
 		if (clearShapesButton) {
 			clearShapesButton.addEventListener('click', () => {
-				const system = window.particleSystem;
-				if (!system) return;
+				const system = this.system;
 				system.shapeField.clear();
 				system.settingsManager.updateSetting("SHAPES", "");
 				this.showSuccessMessage("shapes cleared");
@@ -429,7 +353,7 @@ export class UIController {
 		document.addEventListener('click', (e) => {
 			if (this.particleControls && this.particleControls.style.display !== "none") {
 				// Check if click is outside the controls and not on the settings icon
-				if (!this.particleControls.contains(e.target) && e.target !== this.settingsIcon) {
+				if (!this.particleControls.contains(e.target as Node) && e.target !== this.settingsIcon) {
 					this.hideControlPanel();
 				}
 			}
@@ -439,14 +363,14 @@ export class UIController {
 		document.addEventListener('touchend', (e) => {
 			if (this.particleControls && this.particleControls.style.display !== "none") {
 				// Check if touch is outside the controls and not on the settings icon
-				if (!this.particleControls.contains(e.target) && e.target !== this.settingsIcon) {
+				if (!this.particleControls.contains(e.target as Node) && e.target !== this.settingsIcon) {
 					this.hideControlPanel();
 				}
 			}
 		}, { passive: true });
 	}
 	
-	setShapeModeActive(active) {
+	setShapeModeActive(active: boolean) {
 		const button = document.getElementById("toggleShapeMode");
 		if (!button) return;
 		button.classList.toggle("armed", active);
@@ -471,36 +395,36 @@ export class UIController {
 		}
 	}
 
-	updateUI(settings) {
+	updateUI(settings: Settings) {
 		// Update all sliders and displays
-		for (const key in settings) {
-			const control = document.getElementById(key);
+		for (const key of Object.keys(settings) as SettingKey[]) {
+			const value = settings[key];
+			const control = document.getElementById(key) as HTMLInputElement | null;
 			const valueDisplay = document.getElementById(`${key}_VALUE`);
 
 			if (!control) continue;
 
 			// Update control value
 			if (control.type === "checkbox") {
-				control.checked = settings[key];
+				control.checked = !!value;
 			} else {
-				control.value = settings[key];
+				control.value = String(value);
 			}
 
 			// Update display value
 			if (valueDisplay) {
 				if (control.type === "checkbox") {
-					valueDisplay.textContent = settings[key] ? 'on' : 'off';
-				} else if (typeof settings[key] === "number") {
-					const displayValue = Number.parseFloat(settings[key].toFixed(3)).toString();
-					valueDisplay.textContent = displayValue;
+					valueDisplay.textContent = value ? 'on' : 'off';
+				} else if (typeof value === "number") {
+					valueDisplay.textContent = Number.parseFloat(value.toFixed(3)).toString();
 				} else {
-					valueDisplay.textContent = settings[key];
+					valueDisplay.textContent = String(value);
 				}
 			}
 		}
 	}
 
-	copyToClipboard(text) {
+	copyToClipboard(text: string) {
 		// Create temporary element
 		const el = document.createElement("textarea");
 		el.value = text;
@@ -510,23 +434,21 @@ export class UIController {
 		document.body.appendChild(el);
 
 		// Select and copy
-		const selected =
-			document.getSelection().rangeCount > 0
-				? document.getSelection().getRangeAt(0)
-				: false;
+		const selection = document.getSelection();
+		const selected = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
 
 		el.select();
 		document.execCommand("copy");
 		document.body.removeChild(el);
 
 		// Restore selection if any
-		if (selected) {
-			document.getSelection().removeAllRanges();
-			document.getSelection().addRange(selected);
+		if (selection && selected) {
+			selection.removeAllRanges();
+			selection.addRange(selected);
 		}
 	}
 	
-	showSuccessMessage(message) {
+	showSuccessMessage(message: string) {
 		const messageElement = document.getElementById("success-message");
 		if (!messageElement) return;
 		

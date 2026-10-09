@@ -4,6 +4,7 @@ import ConditionalLayout from './components/ConditionalLayout';
 import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import 'highlight.js/styles/atom-one-dark.css';
+import '../particles/particles.css';
 import PlyrFmPlayer from './components/PlyrFmPlayer';
 import { BackgroundProvider } from './contexts/BackgroundContext';
 import BackgroundSwitcher from './components/BackgroundSwitcher';
@@ -49,14 +50,6 @@ export default function RootLayout({
     return (
         <html lang="en" className={`${firaCode.variable} font-sans`}>
             <head>
-                {/* eslint-disable-next-line @next/next/no-css-tags */}
-                <link id="particle-settings-styles" rel="stylesheet" href="/js/particles/particles.css" />
-                <script
-                    type="importmap"
-                    dangerouslySetInnerHTML={{
-                        __html: '{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/"}}'
-                    }}
-                />
                 <Script
                     src="https://www.googletagmanager.com/gtag/js?id=G-SLML4CSJ70"
                     strategy="lazyOnload"

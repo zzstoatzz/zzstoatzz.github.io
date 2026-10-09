@@ -1,4 +1,4 @@
-//! wasm exports for public/js/particles/wasmPhysics.js
+//! wasm exports for src/particles/wasmPhysics.ts
 const std = @import("std");
 const Physics = @import("physics.zig");
 

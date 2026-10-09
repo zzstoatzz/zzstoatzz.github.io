@@ -1,63 +1,29 @@
 'use client'
 
 import { useEffect, useRef } from 'react';
-import Script from 'next/script';
-import { useRouter } from 'next/navigation';
-
-// Define minimal router type for our needs
-interface RouterInstance {
-    push: (path: string) => void;
-}
-
-declare global {
-    interface Window {
-        particlesInit: (canvas: HTMLCanvasElement, overlay?: HTMLCanvasElement) => void;
-        nextRouter: RouterInstance;
-    }
-}
 
 export function ParticlesContainer() {
-    const particlesInitialized = useRef<boolean>(false);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const overlayRef = useRef<HTMLCanvasElement>(null);
-    const router = useRouter();
 
     useEffect(() => {
-        window.nextRouter = router;
-
-        const initParticles = () => {
-            if (
-                canvasRef.current &&
-                typeof window.particlesInit === 'function' &&
-                !particlesInitialized.current
-            ) {
-                console.log('Initializing particles');
-                const canvas = canvasRef.current;
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-
-                const overlay = overlayRef.current;
-                if (overlay) {
-                    overlay.width = window.innerWidth;
-                    overlay.height = window.innerHeight;
-                }
-
-                window.particlesInit(canvas, overlay || undefined);
-                particlesInitialized.current = true;
+        let cancelled = false;
+        // client only, and kept out of the page bundle
+        import('@/particles/main').then(({ initParticles }) => {
+            const canvas = canvasRef.current;
+            if (cancelled || !canvas) return;
+            const overlay = overlayRef.current;
+            for (const c of [canvas, overlay]) {
+                if (!c) continue;
+                c.width = window.innerWidth;
+                c.height = window.innerHeight;
             }
-        };
-
-        const checkParticlesInit = setInterval(() => {
-            if (typeof window.particlesInit === 'function') {
-                clearInterval(checkParticlesInit);
-                initParticles();
-            }
-        }, 100);
-
+            initParticles(canvas, overlay);
+        });
         return () => {
-            clearInterval(checkParticlesInit);
+            cancelled = true;
         };
-    }, [router]);
+    }, []);
 
     return (
         <>
@@ -72,32 +38,6 @@ export function ParticlesContainer() {
                 ref={overlayRef}
                 className="fixed inset-0 w-full h-full z-0"
                 style={{ pointerEvents: 'none' }}
-            />
-            <Script
-                src="/js/particles/main.js"
-                strategy="afterInteractive"
-                type="module"
-                onLoad={() => {
-                    console.log('Particles script loaded');
-                    if (
-                        canvasRef.current &&
-                        typeof window.particlesInit === 'function' &&
-                        !particlesInitialized.current
-                    ) {
-                        const canvas = canvasRef.current;
-                        canvas.width = window.innerWidth;
-                        canvas.height = window.innerHeight;
-
-                        const overlay = overlayRef.current;
-                        if (overlay) {
-                            overlay.width = window.innerWidth;
-                            overlay.height = window.innerHeight;
-                        }
-
-                        window.particlesInit(canvas, overlay || undefined);
-                        particlesInitialized.current = true;
-                    }
-                }}
             />
         </>
     );

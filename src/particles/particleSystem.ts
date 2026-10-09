@@ -1,82 +1,90 @@
-import { spawnParticle, applyParticleSettings, randomColor } from "./particle.js";
-import { ParticleStore } from "./particleStore.js";
-import { SettingsManager } from "./settingsManager.js";
-import { UIController } from "./uiController.js";
-import { PARTICLE_COLORS } from "./config.js";
-import { CanvasRenderer } from "./canvasRenderer.js";
-import { MouseEffects } from "./mouseEffects.js";
-import { ShapeField } from "./shapes.js";
-import { ShapeEditor } from "./shapeEditor.js";
-import { WasmPhysics } from "./wasmPhysics.js";
+// The particle system: owns the canvases, the particle store, input and the
+// frame loop. Physics runs in wasm (wasmPhysics.ts); drawing goes through
+// WebGL when it is available and Canvas 2D otherwise.
+import type { Settings } from "./config";
+import { spawnParticle, applyParticleSettings, randomColor } from "./particle";
+import { ParticleStore } from "./particleStore";
+import { SettingsManager } from "./settingsManager";
+import { UIController } from "./uiController";
+import { CanvasRenderer } from "./canvasRenderer";
+import { MouseEffects } from "./mouseEffects";
+import { ShapeField } from "./shapes";
+import { ShapeEditor } from "./shapeEditor";
+import type { Connections } from "./wasmPhysics";
+import { NO_CONNECTIONS, WasmPhysics } from "./wasmPhysics";
+import type { WebGLParticleRenderer } from "./webglRenderer";
 
 export class ParticleSystem {
-	constructor(canvas, overlayCanvas) {
+	canvas: HTMLCanvasElement;
+	store = new ParticleStore();
+	// set by applySettings, which first runs while the settings load
+	settings!: Settings;
+	mouseX = 0;
+	mouseY = 0;
+	isMouseDown = false;
+
+	// Canvas 2D: draws everything until WebGL is up, then just stays clear
+	private ctx: CanvasRenderingContext2D;
+	private canvasRenderer: CanvasRenderer;
+	// WebGL renderer, null until it loads (or for good if it can't)
+	webglRenderer: WebGLParticleRenderer | null = null;
+	// mouse effects and shapes draw here, above the particles
+	private overlayCanvas: HTMLCanvasElement | null;
+	private overlayCtx: CanvasRenderingContext2D;
+
+	mouseEffects: MouseEffects;
+	// the connection lines built by the last physics step
+	connections: Connections = NO_CONNECTIONS;
+	shapeField = new ShapeField();
+	settingsManager: SettingsManager;
+	shapeEditor: ShapeEditor;
+	uiController: UIController;
+	private wasmPhysics: WasmPhysics | null = null;
+
+	private animationFrameId: number | null = null;
+	private lastTimestamp = 0;
+	private singleColor = false;
+	private touchStartX = 0;
+	private touchStartY = 0;
+	private touchScrolling = false;
+
+	constructor(canvas: HTMLCanvasElement, overlayCanvas: HTMLCanvasElement | null) {
 		this.canvas = canvas;
-		this.ctx = this.canvas.getContext("2d");
-		this.store = new ParticleStore();
-		this.mouseX = 0;
-		this.mouseY = 0;
-		this.isMouseDown = false;
-		this.animationFrameId = null;
-		this.deltaTime = 0;
-		this.lastTimestamp = 0;
-
-		// Canvas 2D renderer (fallback)
+		this.ctx = context2d(canvas);
 		this.canvasRenderer = new CanvasRenderer(this.ctx);
-
-		// WebGL renderer (initialized async, null until ready)
-		this.webglRenderer = null;
-		this.useWebGL = false;
-
-		// Overlay canvas for mouse effects
-		this.overlayCanvas = overlayCanvas || null;
-		this.overlayCtx = this.overlayCanvas
-			? this.overlayCanvas.getContext("2d")
-			: this.ctx;
-
+		this.overlayCanvas = overlayCanvas;
+		this.overlayCtx = overlayCanvas ? context2d(overlayCanvas) : this.ctx;
 		this.mouseEffects = new MouseEffects(this.overlayCtx);
 
-		// Connection line buffers; views into wasm memory once physics runs
-		this._connPos = new Float32Array(0);
-		this._connAlpha = new Float32Array(0);
-		this._connColor = new Float32Array(0);
-		this._connVertCount = 0;
-
-		this.PARTICLE_COLORS = PARTICLE_COLORS;
-
-		this.shapeField = new ShapeField();
 		this.shapeField.resize(this.canvas.width, this.canvas.height);
 
-		this.settingsManager = new SettingsManager((settings) => {
-			this.applySettings(settings);
-		});
+		// loading the URL's settings applies them right away, spawning the particles
+		this.settingsManager = new SettingsManager((settings) => this.applySettings(settings));
+		this.settings = this.settingsManager.getAllSettings();
 
 		this.shapeEditor = new ShapeEditor(this.shapeField, this.canvas, () => {
 			this.settingsManager.updateSetting("SHAPES", this.shapeField.serialize());
 		});
 
-		this.uiController = new UIController((key, value) => {
-			this.settingsManager.updateSetting(key, value);
-		}, this.settingsManager.getAllSettings());
+		this.uiController = new UIController(
+			this,
+			(key, value) => this.settingsManager.updateSetting(key, value),
+			this.settingsManager.getAllSettings(),
+		);
 
 		this.shapeEditor.onDeactivate = () => this.uiController.setShapeModeActive(false);
-
-		this._settings = this.settingsManager.getAllSettings();
 
 		window.addEventListener("resize", () => this.resizeCanvas());
 		this.resizeCanvas();
 
 		this.init();
 
-		// Try to initialize WebGL (non-blocking)
-		this._initWebGL();
-
-		// Zig/wasm physics (non-blocking)
-		this.wasmPhysics = null;
-		this._initWasmPhysics();
+		// both load in the background; until then Canvas 2D draws and nothing moves
+		this.initWebGL();
+		this.initWasmPhysics();
 	}
 
-	async _initWasmPhysics() {
+	private async initWasmPhysics() {
 		try {
 			const wasm = await WasmPhysics.load();
 			wasm.attach(this.store);
@@ -87,9 +95,9 @@ export class ParticleSystem {
 		}
 	}
 
-	async _initWebGL() {
+	private async initWebGL() {
 		try {
-			const { WebGLParticleRenderer } = await import("./webglRenderer.js");
+			const { WebGLParticleRenderer } = await import("./webglRenderer");
 			const renderer = new WebGLParticleRenderer(this.canvas.width, this.canvas.height);
 
 			// Style and insert the WebGL canvas into the DOM
@@ -98,14 +106,13 @@ export class ParticleSystem {
 			el.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;";
 
 			// Insert before the overlay canvas (so overlay draws on top)
-			if (this.overlayCanvas && this.overlayCanvas.parentElement) {
+			if (this.overlayCanvas?.parentElement) {
 				this.overlayCanvas.parentElement.insertBefore(el, this.overlayCanvas);
 			} else {
-				this.canvas.parentElement.appendChild(el);
+				this.canvas.parentElement?.appendChild(el);
 			}
 
 			this.webglRenderer = renderer;
-			this.useWebGL = true;
 
 			// Clear the Canvas 2D so stale frames don't show through
 			this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -116,8 +123,8 @@ export class ParticleSystem {
 		}
 	}
 
-	init() {
-		const settings = this._settings;
+	private init() {
+		const settings = this.settings;
 		this.store.resize(0);
 		this.spawnParticles(settings.PARTICLE_COUNT, settings);
 
@@ -160,7 +167,7 @@ export class ParticleSystem {
 
 	// Bring particles left outside a shrunken canvas back inside, moving
 	// inward at the speed of an edge that swept past them over PISTON_FRAMES.
-	pistonWalls(w, h) {
+	private pistonWalls(w: number, h: number) {
 		const PISTON_FRAMES = 12;
 		const s = this.store;
 		for (let i = 0; i < s.count; i++) {
@@ -178,22 +185,9 @@ export class ParticleSystem {
 		}
 	}
 
-	bindSystemEvents() {
+	private bindSystemEvents() {
 		this.canvas.style.pointerEvents = "auto";
 		this.canvas.style.zIndex = "10";
-
-		const style = document.createElement("style");
-		style.textContent =
-			".particles-canvas {" +
-			"position: absolute;" +
-			"top: 0;" +
-			"left: 0;" +
-			"width: 100%;" +
-			"height: 100%;" +
-			"pointer-events: auto;" +
-			"z-index: 10;" +
-			"}";
-		document.head.appendChild(style);
 
 		document.addEventListener("mousemove", (e) => this.handleMouseMove(e));
 
@@ -214,7 +208,7 @@ export class ParticleSystem {
 			this.mouseEffects.stopHold(
 				this.mouseX, this.mouseY,
 				this.canvas.width, this.canvas.height,
-				this._settings,
+				this.settings,
 			);
 		});
 
@@ -227,7 +221,7 @@ export class ParticleSystem {
 					if (this.isPointInCanvas(touch.clientX, touch.clientY)) {
 						const elementsAtPoint = document.elementsFromPoint(touch.clientX, touch.clientY);
 						const isUIElement = elementsAtPoint.some((el) =>
-							el.closest("nav") ||
+							!!el.closest("nav") ||
 							el.closest(".particle-controls") ||
 							el.closest("button") ||
 							el.tagName === "BUTTON" ||
@@ -293,19 +287,19 @@ export class ParticleSystem {
 			this.mouseEffects.stopHold(
 				this.mouseX, this.mouseY,
 				this.canvas.width, this.canvas.height,
-				this._settings,
+				this.settings,
 			);
 		});
 	}
 
 	// True when the document is taller than the viewport, i.e. the user can
 	// scroll. On such pages touch must scroll the page, not drive particles.
-	isPageScrollable() {
+	private isPageScrollable() {
 		if (document.documentElement.classList.contains("home-locked")) return false;
 		return document.documentElement.scrollHeight > window.innerHeight + 1;
 	}
 
-	isPointInCanvas(clientX, clientY) {
+	private isPointInCanvas(clientX: number, clientY: number) {
 		const rect = this.canvas.getBoundingClientRect();
 		return (
 			clientX >= rect.left &&
@@ -315,7 +309,7 @@ export class ParticleSystem {
 		);
 	}
 
-	handleMouseMove(e) {
+	private handleMouseMove(e: { clientX: number; clientY: number }) {
 		if (this.isPointInCanvas(e.clientX, e.clientY)) {
 			const rect = this.canvas.getBoundingClientRect();
 			this.mouseX = e.clientX - rect.left;
@@ -323,8 +317,8 @@ export class ParticleSystem {
 		}
 	}
 
-	applySettings(settings) {
-		this._settings = { ...settings };
+	private applySettings(settings: Settings) {
+		this.settings = { ...settings };
 
 		const serialized = settings.SHAPES || "";
 		if (this.shapeField && serialized !== this.shapeField.serialize()) {
@@ -336,9 +330,9 @@ export class ParticleSystem {
 		s.version++;
 
 		s.setCustomColor(settings.PARTICLE_COLOR);
-		const single = !!settings.PARTICLE_SINGLE_COLOR;
-		if (single !== !!this._singleColor) {
-			this._singleColor = single;
+		const single = settings.PARTICLE_SINGLE_COLOR;
+		if (single !== this.singleColor) {
+			this.singleColor = single;
 			this.recolor(settings);
 		}
 
@@ -348,7 +342,7 @@ export class ParticleSystem {
 	}
 
 	// New colors for every particle: a fresh random mix, or all the single color.
-	recolor(settings = this._settings) {
+	private recolor(settings = this.settings) {
 		const s = this.store;
 		for (let i = 0; i < s.count; i++) s.color[i] = randomColor(settings);
 		s.version++;
@@ -356,7 +350,7 @@ export class ParticleSystem {
 
 	// "randomize colors": back to the mix if one color was on, then reshuffle.
 	randomizeColors() {
-		if (this._settings.PARTICLE_SINGLE_COLOR) {
+		if (this.settings.PARTICLE_SINGLE_COLOR) {
 			this.settingsManager.updateSetting("PARTICLE_SINGLE_COLOR", false);
 			this.uiController.updateUI(this.settingsManager.getAllSettings());
 		}
@@ -364,7 +358,7 @@ export class ParticleSystem {
 	}
 
 	// Append n particles at random positions.
-	spawnParticles(n, settings) {
+	private spawnParticles(n: number, settings: Settings) {
 		const s = this.store;
 		const start = s.count;
 		s.resize(start + n);
@@ -377,8 +371,7 @@ export class ParticleSystem {
 
 	// The physics is zig/wasm (zig/src/physics.zig, see wasmPhysics.js). Until
 	// the module loads, or if it can't, the particles are drawn but stay put.
-	updateParticles(deltaTime) {
-		this.deltaTime = deltaTime / 1000.0;
+	private updateParticles(deltaTime: number) {
 		if (!this.wasmPhysics) return;
 		try {
 			this.wasmPhysics.step(this, deltaTime);
@@ -388,23 +381,19 @@ export class ParticleSystem {
 		}
 	}
 
-	animate(timestamp = 0) {
-		if (!this.canvas) {
-			this.stop();
-			return;
-		}
-
+	private animate(timestamp = 0) {
 		const elapsed = timestamp - (this.lastTimestamp || timestamp);
 		this.lastTimestamp = timestamp;
 		// never negative: a restarted loop starts from timestamp 0
 		const deltaTime = Math.max(0, Math.min(elapsed, 100));
 
-		this._settings = this.settingsManager.getAllSettings();
+		this.settings = this.settingsManager.getAllSettings();
 
 		// Physics (same for both paths)
 		this.updateParticles(deltaTime);
 
-		if (this.useWebGL) {
+		const conn = this.connections;
+		if (this.webglRenderer) {
 			// --- WebGL path ---
 			// Clear overlay for mouse effects
 			if (this.overlayCanvas) {
@@ -413,16 +402,14 @@ export class ParticleSystem {
 
 			// Upload particle data and pre-built connections to GPU, then render
 			this.webglRenderer.updateParticles(this.store, this.store.count);
-			this.webglRenderer.uploadConnections(
-				this._connPos, this._connAlpha, this._connColor, this._connVertCount, this._settings,
-			);
+			this.webglRenderer.uploadConnections(conn.pos, conn.alpha, conn.color, conn.verts, this.settings);
 			this.webglRenderer.render();
 
 			this.shapeField.draw(this.overlayCtx, this.shapeEditor.preview, this.shapeEditor.selected);
 
 			// Mouse effects on overlay (Canvas 2D)
 			this.mouseEffects.updateAndDraw(
-				timestamp, this.mouseX, this.mouseY, this.isMouseDown, this._settings,
+				timestamp, this.mouseX, this.mouseY, this.isMouseDown, this.settings,
 			);
 		} else {
 			// --- Canvas 2D fallback ---
@@ -432,10 +419,10 @@ export class ParticleSystem {
 				this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
 			}
 
-			this.canvasRenderer.drawConnections(this._connPos, this._connAlpha, this._connVertCount, this._settings);
+			this.canvasRenderer.drawConnections(conn.pos, conn.alpha, conn.verts, this.settings);
 
 			this.mouseEffects.updateAndDraw(
-				timestamp, this.mouseX, this.mouseY, this.isMouseDown, this._settings,
+				timestamp, this.mouseX, this.mouseY, this.isMouseDown, this.settings,
 			);
 
 			this.canvasRenderer.drawParticles(this.store, this.store.count);
@@ -459,7 +446,13 @@ export class ParticleSystem {
 		this.stop();
 		this.lastTimestamp = 0;
 		this.store.resize(0);
-		this.spawnParticles(this._settings.PARTICLE_COUNT, this._settings);
+		this.spawnParticles(this.settings.PARTICLE_COUNT, this.settings);
 		this.animate();
 	}
+}
+
+function context2d(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
+	const ctx = canvas.getContext("2d");
+	if (!ctx) throw new Error("canvas 2d context unavailable");
+	return ctx;
 }

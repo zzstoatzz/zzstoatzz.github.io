@@ -8,9 +8,14 @@
 //
 // Views stay valid until the next resize: the wasm step never grows memory.
 
-import { PARTICLE_COLORS, PARTICLE_RGB, CUSTOM_COLOR, RANGES, hexToRgb } from "./config.js";
+import type { Rgb } from "./config";
+import { PARTICLE_COLORS, PARTICLE_RGB, CUSTOM_COLOR, RANGES, hexToRgb } from "./config";
+import type { PhysicsExports } from "./wasmPhysics";
 
-const F64_FIELDS = ["x", "y", "vx", "vy", "radius", "mass", "sizeVar"];
+const F64_FIELDS = ["x", "y", "vx", "vy", "radius", "mass", "sizeVar"] as const;
+type F64Field = (typeof F64_FIELDS)[number];
+type Field = F64Field | "color";
+
 const WASM_PTR = {
 	x: "xPtr",
 	y: "yPtr",
@@ -20,92 +25,105 @@ const WASM_PTR = {
 	mass: "massPtr",
 	sizeVar: "sizeVarPtr",
 	color: "colorPtr",
-};
+} as const satisfies Record<Field, keyof PhysicsExports>;
 
 export class ParticleStore {
+	count = 0;
+	// bumped whenever radius or color may have changed (resize, settings),
+	// so renderers re-upload those only when needed
+	version = 0;
+	wasm: PhysicsExports | null = null;
+	// color index -> rgb / css color; the last slot is the single color
+	palette: Rgb[] = [...PARTICLE_RGB, hexToRgb(RANGES.PARTICLE_COLOR.default)];
+	paletteHex: string[] = [...PARTICLE_COLORS, RANGES.PARTICLE_COLOR.default];
+
+	x = new Float64Array(0);
+	y = new Float64Array(0);
+	vx = new Float64Array(0);
+	vy = new Float64Array(0);
+	radius = new Float64Array(0);
+	mass = new Float64Array(0);
+	sizeVar = new Float64Array(0);
+	color = new Uint8Array(0);
+
+	private capacity = 0;
+	private buffer: ArrayBuffer | null = null;
+
 	constructor() {
-		this.count = 0;
-		// bumped whenever radius or color may have changed (resize, settings),
-		// so renderers re-upload those only when needed
-		this.version = 0;
-		this.wasm = null;
-		// color index -> rgb / css color; the last slot is the single color
-		this.palette = [...PARTICLE_RGB, hexToRgb(RANGES.PARTICLE_COLOR.default)];
-		this.paletteHex = [...PARTICLE_COLORS, RANGES.PARTICLE_COLOR.default];
-		this._capacity = 0;
-		this._alloc(64);
+		this.alloc(64);
 	}
 
 	// JS backend: grow the typed arrays, keeping the first `count` particles.
-	_alloc(capacity) {
+	private alloc(capacity: number) {
 		for (const f of F64_FIELDS) {
 			const next = new Float64Array(capacity);
-			if (this[f]) next.set(this[f].subarray(0, this.count));
+			next.set(this[f].subarray(0, this.count));
 			this[f] = next;
 		}
 		const color = new Uint8Array(capacity);
-		if (this.color) color.set(this.color.subarray(0, this.count));
+		color.set(this.color.subarray(0, this.count));
 		this.color = color;
-		this._capacity = capacity;
+		this.capacity = capacity;
 	}
 
 	// Wasm backend: rebuild the views after the columns moved.
-	_view() {
-		const w = this.wasm;
+	private view(w: PhysicsExports) {
 		const buf = w.memory.buffer;
 		const n = this.count;
 		// an empty column's pointer is not a real address
-		const ptr = (f) => (n > 0 ? w[WASM_PTR[f]]() : 0);
+		const ptr = (f: Field) => (n > 0 ? w[WASM_PTR[f]]() : 0);
 		for (const f of F64_FIELDS) this[f] = new Float64Array(buf, ptr(f), n);
 		this.color = new Uint8Array(buf, ptr("color"), n);
-		this._buffer = buf;
+		this.buffer = buf;
 	}
 
 	// Set the particle count. Existing particles keep their state; new slots
 	// are for the caller to fill.
-	resize(n) {
+	resize(n: number) {
 		this.version++;
 		if (this.wasm) {
 			if (!this.wasm.setCount(n)) throw new Error("wasm physics: out of memory");
 			this.count = n;
-			this._view();
+			this.view(this.wasm);
 			return;
 		}
-		if (n > this._capacity) this._alloc(Math.max(n, this._capacity * 2));
+		if (n > this.capacity) this.alloc(Math.max(n, this.capacity * 2));
 		this.count = n;
 	}
 
 	// Set the color used by CUSTOM_COLOR particles.
-	setCustomColor(hex) {
+	setCustomColor(hex: string) {
 		if (this.paletteHex[CUSTOM_COLOR] === hex) return;
 		this.paletteHex[CUSTOM_COLOR] = hex;
 		this.palette[CUSTOM_COLOR] = hexToRgb(hex);
-		this._writePalette();
+		this.writePalette();
 		this.version++;
 	}
 
 	// wasm builds connection colors from its own copy of the palette
-	_writePalette() {
+	private writePalette() {
 		if (!this.wasm) return;
 		const out = new Float64Array(this.wasm.memory.buffer, this.wasm.palettePtr(), 256 * 3);
 		this.palette.forEach((rgb, k) => out.set(rgb, k * 3));
 	}
 
 	// Move the state into wasm memory; from here on the arrays are wasm views.
-	attach(wasm) {
+	attach(wasm: PhysicsExports) {
 		const n = this.count;
-		const old = {};
-		for (const f of F64_FIELDS) old[f] = this[f].subarray(0, n);
-		old.color = this.color.subarray(0, n);
+		const old = Object.fromEntries(F64_FIELDS.map((f) => [f, this[f].subarray(0, n)])) as Record<
+			F64Field,
+			Float64Array
+		>;
+		const oldColor = this.color.subarray(0, n);
 		this.wasm = wasm;
 		this.resize(n);
 		for (const f of F64_FIELDS) this[f].set(old[f]);
-		this.color.set(old.color);
-		this._writePalette();
+		this.color.set(oldColor);
+		this.writePalette();
 	}
 
 	// Views go stale if wasm memory ever grows outside a resize; cheap guard.
 	sync() {
-		if (this.wasm && this.wasm.memory.buffer !== this._buffer) this._view();
+		if (this.wasm && this.wasm.memory.buffer !== this.buffer) this.view(this.wasm);
 	}
 }

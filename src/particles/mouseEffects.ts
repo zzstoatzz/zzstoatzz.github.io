@@ -1,10 +1,25 @@
-// Mouse effect rendering — pinwheel, aura, lightning, smoke.
-// Draws to its own Canvas 2D overlay context.
-// Extracted from particleSystem.js updateAndDrawMouseEffects().
+// Mouse effect rendering — pinwheel, aura, lightning, smoke — plus the
+// hold/release state the physics reads for the vortex force. Draws to its own
+// Canvas 2D overlay context.
+import type { Settings } from "./config";
+
+interface Effect {
+	x: number;
+	y: number;
+	radius: number;
+	startTime: number;
+	duration: number;
+	intensity: number;
+	isLightning?: boolean;
+	// flies to (targetX, targetY), for the new-best-hold flourish
+	flying?: boolean;
+	targetX?: number;
+	targetY?: number;
+}
 
 // localStorage throws in sandboxed iframes (e.g. leaflet.pub embeds) —
 // even reading window.localStorage raises without allow-same-origin.
-function storageGet(key) {
+function storageGet(key: string) {
 	try {
 		return localStorage.getItem(key);
 	} catch {
@@ -12,7 +27,7 @@ function storageGet(key) {
 	}
 }
 
-function storageSet(key, value) {
+function storageSet(key: string, value: string) {
 	try {
 		localStorage.setItem(key, value);
 	} catch {
@@ -21,21 +36,19 @@ function storageSet(key, value) {
 }
 
 export class MouseEffects {
-	constructor(ctx) {
-		this.ctx = ctx;
-		this.effects = [];
+	private effects: Effect[] = [];
 
-		// Hold tracking
-		this.holdStartTime = null;
-		this.bestHoldDuration = Number.parseFloat(
-			storageGet("torchBearerHighScore") || "0",
-		);
-		this.releaseMultiplier = 1;
-		this.releaseEndTime = null;
+	// Hold tracking
+	holdStartTime: number | null = null;
+	releaseMultiplier = 1;
+	private releaseEndTime: number | null = null;
+	private bestHoldDuration = Number.parseFloat(storageGet("torchBearerHighScore") || "0");
 
-		// Torch bearer UI
-		this.leaderboardElement = null;
-		this._createTorchBearerUI();
+	// Torch bearer UI: the best hold so far, shown in the bottom-right corner
+	private leaderboardElement: HTMLDivElement;
+
+	constructor(private ctx: CanvasRenderingContext2D) {
+		this.leaderboardElement = this.createTorchBearerUI();
 	}
 
 	startHold() {
@@ -52,7 +65,7 @@ export class MouseEffects {
 		this.releaseEndTime = null;
 	}
 
-	stopHold(mouseX, mouseY, canvasWidth, canvasHeight, settings) {
+	stopHold(mouseX: number, mouseY: number, canvasWidth: number, canvasHeight: number, settings: Settings) {
 		if (!this.holdStartTime) return;
 
 		const duration = (performance.now() - this.holdStartTime) / 1000;
@@ -86,7 +99,7 @@ export class MouseEffects {
 			this.bestHoldDuration = duration;
 			storageSet("torchBearerHighScore", this.bestHoldDuration.toString());
 
-			this._updateLeaderboardDisplay();
+			this.leaderboardElement.textContent = this.leaderboardText();
 			this.leaderboardElement.classList.add("visible");
 			this.leaderboardElement.style.boxShadow = "0 0 20px rgba(255, 215, 0, 0.8)";
 
@@ -119,14 +132,14 @@ export class MouseEffects {
 	}
 
 	// Get current hold intensity (0-1, logarithmic).
-	getHoldIntensity(timestamp) {
+	getHoldIntensity(timestamp: number) {
 		if (!this.holdStartTime) return 0;
 		const holdDuration = (timestamp - this.holdStartTime) / 1000;
 		return Math.log(holdDuration + 1) / Math.log(10);
 	}
 
 	// Main render — draws all mouse effects to overlay canvas.
-	updateAndDraw(timestamp, mouseX, mouseY, isMouseDown, settings) {
+	updateAndDraw(timestamp: number, mouseX: number, mouseY: number, isMouseDown: boolean, settings: Settings) {
 		const ctx = this.ctx;
 
 		if (!settings.ENABLE_VORTEX_FORCE) return;
@@ -172,14 +185,14 @@ export class MouseEffects {
 			let y = effect.y;
 			if (effect.flying) {
 				const flyEase = 1 - (1 - progress) ** 3;
-				x = effect.x + (effect.targetX - effect.x) * flyEase;
-				y = effect.y + (effect.targetY - effect.y) * flyEase;
+				x = effect.x + ((effect.targetX ?? x) - effect.x) * flyEase;
+				y = effect.y + ((effect.targetY ?? y) - effect.y) * flyEase;
 			}
 
 			if (effect.isLightning) {
-				this._drawLightningAfterGlow(ctx, x, y, effect, progress);
+				this.drawLightningAfterGlow(ctx, x, y, effect, progress);
 			} else {
-				this._drawRipple(ctx, x, y, effect, progress, easeOutQuad);
+				this.drawRipple(ctx, x, y, effect, progress, easeOutQuad);
 			}
 		}
 
@@ -191,18 +204,18 @@ export class MouseEffects {
 				const emergeEase = emergeFactor * emergeFactor * (3 - 2 * emergeFactor);
 				const time = timestamp / 1000;
 
-				this._drawAuraLayers(ctx, mouseX, mouseY, time, holdIntensity, emergeEase);
-				this._drawPinwheel(ctx, mouseX, mouseY, time, holdIntensity, emergeEase, settings);
-				this._drawLightning(ctx, mouseX, mouseY, time, holdIntensity, emergeEase, settings);
-				this._drawCenterMelt(ctx, mouseX, mouseY, time, holdIntensity, emergeEase);
-				this._drawSmoke(ctx, mouseX, mouseY, time, holdIntensity);
+				this.drawAuraLayers(ctx, mouseX, mouseY, time, holdIntensity, emergeEase);
+				this.drawPinwheel(ctx, mouseX, mouseY, time, holdIntensity, emergeEase);
+				this.drawLightning(ctx, mouseX, mouseY, time, holdIntensity, emergeEase);
+				this.drawCenterMelt(ctx, mouseX, mouseY, time, holdIntensity, emergeEase);
+				this.drawSmoke(ctx, mouseX, mouseY, time, holdIntensity);
 			}
 		}
 
 		ctx.restore();
 	}
 
-	_drawLightningAfterGlow(ctx, x, y, effect, progress) {
+	private drawLightningAfterGlow(ctx: CanvasRenderingContext2D, x: number, y: number, effect: Effect, progress: number) {
 		const currentOpacity = Math.max(0, effect.intensity * (1 - progress));
 		const currentRadius = Math.max(1, effect.radius || 10);
 
@@ -221,7 +234,7 @@ export class MouseEffects {
 		ctx.fill();
 	}
 
-	_drawRipple(ctx, x, y, effect, progress, easeOutQuad) {
+	private drawRipple(ctx: CanvasRenderingContext2D, x: number, y: number, effect: Effect, progress: number, easeOutQuad: number) {
 		const currentOpacity = Math.max(0, effect.intensity * (1 - progress));
 		const currentRadius = Math.max(
 			1,
@@ -247,7 +260,14 @@ export class MouseEffects {
 		ctx.fill();
 	}
 
-	_drawAuraLayers(ctx, mouseX, mouseY, time, holdIntensity, emergeEase) {
+	private drawAuraLayers(
+		ctx: CanvasRenderingContext2D,
+		mouseX: number,
+		mouseY: number,
+		time: number,
+		holdIntensity: number,
+		emergeEase: number,
+	) {
 		for (let layer = 3; layer >= 0; layer--) {
 			const phase = (time * (layer + 1) * 0.5) % (Math.PI * 2);
 			const layerIntensity = (Math.sin(phase) + 1) / 2;
@@ -285,7 +305,14 @@ export class MouseEffects {
 		}
 	}
 
-	_drawPinwheel(ctx, mouseX, mouseY, time, holdIntensity, emergeEase) {
+	private drawPinwheel(
+		ctx: CanvasRenderingContext2D,
+		mouseX: number,
+		mouseY: number,
+		time: number,
+		holdIntensity: number,
+		emergeEase: number,
+	) {
 		const vortexCount = 3 + Math.floor(holdIntensity > 0.7 ? (holdIntensity - 0.7) * 6.67 : 0);
 		const rotationSpeed = (0.1 + holdIntensity * holdIntensity * 8) * emergeEase;
 		const baseRotation = time * rotationSpeed;
@@ -321,7 +348,14 @@ export class MouseEffects {
 		}
 	}
 
-	_drawLightning(ctx, mouseX, mouseY, time, holdIntensity, emergeEase) {
+	private drawLightning(
+		ctx: CanvasRenderingContext2D,
+		mouseX: number,
+		mouseY: number,
+		time: number,
+		holdIntensity: number,
+		emergeEase: number,
+	) {
 		if (holdIntensity <= 0.8 || emergeEase <= 0.9) return;
 
 		const crackleIntensity = (holdIntensity - 0.8) / 0.2;
@@ -346,7 +380,7 @@ export class MouseEffects {
 		}
 
 		// Vortex positions
-		const vortexPositions = [];
+		const vortexPositions: { x: number; y: number }[] = [];
 		for (let v = 0; v < vortexCount; v++) {
 			const angle = baseRotation + (v * Math.PI * 2 / vortexCount);
 			const wobble = Math.sin(time * 3 + v) * 2;
@@ -452,7 +486,14 @@ export class MouseEffects {
 		ctx.shadowBlur = 0;
 	}
 
-	_drawCenterMelt(ctx, mouseX, mouseY, time, holdIntensity, emergeEase) {
+	private drawCenterMelt(
+		ctx: CanvasRenderingContext2D,
+		mouseX: number,
+		mouseY: number,
+		time: number,
+		holdIntensity: number,
+		emergeEase: number,
+	) {
 		const orbitRadius = (5 + holdIntensity * 20) * emergeEase;
 
 		const meltGradient = ctx.createRadialGradient(
@@ -477,7 +518,13 @@ export class MouseEffects {
 		ctx.fill();
 	}
 
-	_drawSmoke(ctx, mouseX, mouseY, time, holdIntensity) {
+	private drawSmoke(
+		ctx: CanvasRenderingContext2D,
+		mouseX: number,
+		mouseY: number,
+		time: number,
+		holdIntensity: number,
+	) {
 		const smokeCount = 5;
 		for (let i = 0; i < smokeCount; i++) {
 			const tendrilPhase = (time * 0.7 + i * 1.3) % 3;
@@ -512,51 +559,21 @@ export class MouseEffects {
 		}
 	}
 
-	_createTorchBearerUI() {
-		this.leaderboardElement = document.createElement("div");
-		this.leaderboardElement.id = "ghost-leaderboard";
-		this.leaderboardElement.style.cssText = `
-			position: fixed;
-			bottom: 20px;
-			right: 20px;
-			pointer-events: none;
-			font-family: monospace;
-			font-size: 12px;
-			color: rgba(255, 255, 255, 0.8);
-			background: rgba(0, 0, 0, 0.5);
-			padding: 8px 12px;
-			border-radius: 6px;
-			z-index: 10000;
-			backdrop-filter: blur(10px);
-			border: 1px solid rgba(255, 255, 255, 0.05);
-			transition: all 0.3s ease;
-			opacity: 0;
-		`;
-		this._updateLeaderboardDisplay();
-		document.body.appendChild(this.leaderboardElement);
-
-		const style = document.createElement("style");
-		style.textContent = `
-			#ghost-leaderboard.visible {
-				opacity: 1 !important;
-			}
-		`;
-		document.head.appendChild(style);
+	private createTorchBearerUI() {
+		const el = document.createElement("div");
+		el.id = "ghost-leaderboard";
+		el.textContent = this.leaderboardText();
+		document.body.appendChild(el);
 
 		document.addEventListener("mousemove", (e) => {
 			const threshold = 150;
-			const inCorner =
-				e.clientX > window.innerWidth - threshold &&
-				e.clientY > window.innerHeight - threshold;
-			if (inCorner) {
-				this.leaderboardElement.classList.add("visible");
-			} else {
-				this.leaderboardElement.classList.remove("visible");
-			}
+			const inCorner = e.clientX > window.innerWidth - threshold && e.clientY > window.innerHeight - threshold;
+			el.classList.toggle("visible", inCorner);
 		});
+		return el;
 	}
 
-	_updateLeaderboardDisplay() {
-		this.leaderboardElement.innerHTML = `✦ ${this.bestHoldDuration.toFixed(2)}s`;
+	private leaderboardText() {
+		return `✦ ${this.bestHoldDuration.toFixed(2)}s`;
 	}
 }
