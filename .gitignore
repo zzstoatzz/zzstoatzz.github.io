@@ -15,3 +15,4 @@ dist/
 zig/.zig-cache/
 zig/zig-out/
 zig/demo/dist/
+zig/zig-pkg/

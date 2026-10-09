@@ -11,6 +11,32 @@ pub fn build(b: *std.Build) void {
     }) });
     b.step("test", "run unit tests").dependOn(&b.addRunArtifact(tests).step);
 
+    if (b.option(bool, "hegel", "build the property tests (builds libhegel once, needs cargo)") orelse false) {
+        if (b.lazyDependency("hegel", .{ .target = target, .optimize = optimize })) |hegel| {
+            const pbt = b.addExecutable(.{
+                .name = "pbt",
+                .root_module = b.createModule(.{
+                    .root_source_file = b.path("pbt/machine.zig"),
+                    .target = target,
+                    .optimize = optimize,
+                    .imports = &.{
+                        .{ .name = "hegel", .module = hegel.module("hegel") },
+                        .{ .name = "physics", .module = b.createModule(.{
+                            .root_source_file = b.path("src/physics.zig"),
+                            .target = target,
+                            .optimize = optimize,
+                        }) },
+                    },
+                }),
+            });
+            // libhegel is rust; its std unwinds through libgcc_s on linux
+            if (target.result.os.tag == .linux) pbt.root_module.linkSystemLibrary("gcc_s", .{});
+            const run = b.addRunArtifact(pbt);
+            run.addPassthruArgs();
+            b.step("pbt", "run the physics state-machine property test").dependOn(&run.step);
+        }
+    }
+
     // physics.wasm: current browsers, with simd128 (safari 16.4+, chrome and
     // firefox 91+). physics-nosimd.wasm: the same code for the baseline wasm
     // every browser since 2017 runs.

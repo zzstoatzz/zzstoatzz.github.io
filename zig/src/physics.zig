@@ -164,6 +164,9 @@ conn_color: []f32 = &.{},
 conn_verts: u32 = 0,
 /// seconds, set at the start of each step
 dt: f64 = 0,
+/// false runs the pair pass one pair at a time: the reference the simd sweep
+/// must match bit for bit (zig/pbt checks it)
+simd: bool = true,
 
 pub fn deinit(p: *Physics, a: Allocator) void {
     p.particles.deinit(a);
@@ -352,6 +355,11 @@ const V = @Vector(lanes, f64);
 ///     never change, so computing them ahead of applying them is safe
 ///   - the adds into particle a happen in the same sequence as in js
 inline fn sweep(p: *Physics, ctx: *const PairCtx, a: u32, lo: u32, hi: u32) void {
+    if (!p.simd) {
+        var b = lo;
+        while (b < hi) : (b += 1) p.orderedPair(ctx, a, b);
+        return;
+    }
     const g = &p.scratch;
     const ax: V = @splat(g.x[a]);
     const ay: V = @splat(g.y[a]);

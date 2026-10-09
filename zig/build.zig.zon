@@ -3,5 +3,13 @@
     .version = "0.1.0",
     .fingerprint = 0xcc55397a43a622c0,
     .minimum_zig_version = "0.17.0",
-    .paths = .{ "build.zig", "build.zig.zon", "src" },
+    .dependencies = .{
+        // property tests only (zig build pbt -Dhegel); lazy, so plain builds never fetch it
+        .hegel = .{
+            .url = "https://tangled.org/zzstoatzz.io/hegel-zig/archive/fc346116ab826bc3ea73ae2ff80b31b7cfc83cde.tar.gz",
+            .hash = "hegel-0.0.0-1OMgSdRsAABMZ_HL2CM3OdIVYyVVHvkBMZ3dEwxMSim8",
+            .lazy = true,
+        },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "src", "pbt" },
 }
