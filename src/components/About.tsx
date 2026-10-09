@@ -110,7 +110,7 @@ export default function About() {
                 <p>
                     I am a physicist at heart and love graph theory. I also love listening to and playing music, and hacking on{' '}
                     <a href="https://waow.tech/go" target="_blank" rel="noopener noreferrer">
-                        waow.tech/go
+                        atproto
                     </a>
                     .
                 </p>
