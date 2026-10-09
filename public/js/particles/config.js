@@ -15,6 +15,8 @@ export const RANGES = {
 	CONNECTION_COLOR: { default: "#64ffda" },
 	CONNECTION_WIDTH: { min: 0.1, max: 2, step: 0.1, default: 0.3 },
 	PARTICLE_COLOR: { default: "#64ffda" },
+	// true: every particle takes PARTICLE_COLOR; false: a random PARTICLE_COLORS mix
+	PARTICLE_SINGLE_COLOR: { default: false },
 	ENABLE_VORTEX_FORCE: { default: false },
 	SHAPES: { default: "" },
 };
@@ -40,6 +42,20 @@ export const PARTICLE_COLORS = [
 	"#ff79c6", // Pink
 	"#ffb86c", // Orange
 ];
+
+// "#rrggbb" -> [r, g, b] in 0..1
+export function hexToRgb(hex) {
+	return [
+		Number.parseInt(hex.slice(1, 3), 16) / 255,
+		Number.parseInt(hex.slice(3, 5), 16) / 255,
+		Number.parseInt(hex.slice(5, 7), 16) / 255,
+	];
+}
+
+// [r, g, b] per PARTICLE_COLORS entry. Particles store a color as an index:
+// 0..PARTICLE_COLORS.length-1 for the mix, CUSTOM_COLOR for the single color.
+export const PARTICLE_RGB = PARTICLE_COLORS.map(hexToRgb);
+export const CUSTOM_COLOR = PARTICLE_COLORS.length;
 
 // Particle appearance configuration
 export const MIN_PARTICLE_RADIUS = 1;

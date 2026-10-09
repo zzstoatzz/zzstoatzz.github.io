@@ -10,25 +10,28 @@ export class CanvasRenderer {
 		this.ctx.clearRect(0, 0, width, height);
 	}
 
-	// Draw all particles, batched by color for efficiency.
-	drawParticles(particles, count) {
+	// Draw all particles from the store, batched by color for efficiency.
+	drawParticles(s, count) {
 		const byColor = new Map();
 		for (let i = 0; i < count; i++) {
-			const p = particles[i];
-			let batch = byColor.get(p.color);
+			const c = s.color[i];
+			let batch = byColor.get(c);
 			if (!batch) {
 				batch = [];
-				byColor.set(p.color, batch);
+				byColor.set(c, batch);
 			}
-			batch.push(p);
+			batch.push(i);
 		}
 
-		for (const [color, batch] of byColor) {
-			this.ctx.fillStyle = color;
+		for (const [c, batch] of byColor) {
+			this.ctx.fillStyle = s.paletteHex[c];
 			this.ctx.beginPath();
-			for (const p of batch) {
-				this.ctx.moveTo(p.x + p.radius, p.y);
-				this.ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+			for (const i of batch) {
+				const x = s.x[i];
+				const y = s.y[i];
+				const r = s.radius[i];
+				this.ctx.moveTo(x + r, y);
+				this.ctx.arc(x, y, r, 0, Math.PI * 2);
 			}
 			this.ctx.fill();
 		}
@@ -36,7 +39,7 @@ export class CanvasRenderer {
 
 	// Draw connection lines between nearby particles.
 	// Uses the spatial hash to enumerate pairs efficiently.
-	drawConnections(particles, spatialHash, settings) {
+	drawConnections(s, spatialHash, settings) {
 		const connectionOpacity = settings.CONNECTION_OPACITY;
 		if (connectionOpacity <= 0.001 || settings.INTERACTION_RADIUS <= 0) return;
 
@@ -50,12 +53,9 @@ export class CanvasRenderer {
 
 		const linesByOpacity = {};
 
-		spatialHash.forEachPair(particles, (i, j) => {
-			const p1 = particles[i];
-			const p2 = particles[j];
-
-			const dx = p2.x - p1.x;
-			const dy = p2.y - p1.y;
+		spatialHash.forEachPair((i, j) => {
+			const dx = s.x[j] - s.x[i];
+			const dy = s.y[j] - s.y[i];
 			const distSq = dx * dx + dy * dy;
 
 			if (distSq < interactionRadiusSq) {
@@ -67,7 +67,7 @@ export class CanvasRenderer {
 					if (!linesByOpacity[opacityKey]) {
 						linesByOpacity[opacityKey] = [];
 					}
-					linesByOpacity[opacityKey].push(p1.x, p1.y, p2.x, p2.y);
+					linesByOpacity[opacityKey].push(s.x[i], s.y[i], s.x[j], s.y[j]);
 				}
 			}
 		});

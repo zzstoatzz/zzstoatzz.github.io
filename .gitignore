@@ -45,3 +45,8 @@ uv.lock
 # sound
 *.mp3
 *.wav
+
+# zig
+zig/.zig-cache/
+zig/zig-out/
+zig/demo/dist/

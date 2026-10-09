@@ -372,9 +372,6 @@ export class UIController {
 						<button id="resetDefaults" class="button">reset</button>
 						<button id="generateShareLink" class="button">share</button>
 					</div>
-					<div class="button-row" style="margin-top: 8px;">
-						<button id="randomizeColors" class="button">randomize colors</button>
-					</div>
 				</div>
 			</div>
 		`;
@@ -385,9 +382,10 @@ export class UIController {
 
 		// Group controls by category with updated names and added ELASTICITY
 		const categories = {
-			'particles': ['PARTICLE_COUNT', 'GRAVITY', 'AVERAGE_PARTICLE_SIZE', 'DRAG', 'ELASTICITY'],
-			'connections': ['INTERACTION_RADIUS', 'CONNECTION_OPACITY', 'CONNECTION_WIDTH', 'CONNECTION_COLOR'],
-			'forces': ['EXPLOSION_RADIUS', 'EXPLOSION_FORCE', 'ATTRACT', 'SMOOTHING_FACTOR', 'ENABLE_VORTEX_FORCE']
+			'particles': ['PARTICLE_COUNT', 'AVERAGE_PARTICLE_SIZE', 'DRAG', 'ELASTICITY'],
+			'forces': ['GRAVITY', 'ATTRACT', 'SMOOTHING_FACTOR', 'EXPLOSION_RADIUS', 'EXPLOSION_FORCE', 'ENABLE_VORTEX_FORCE'],
+			'color': ['PARTICLE_SINGLE_COLOR', 'PARTICLE_COLOR'],
+			'connections': ['INTERACTION_RADIUS', 'CONNECTION_OPACITY', 'CONNECTION_WIDTH', 'CONNECTION_COLOR']
 		};
 
 		let first = true;
@@ -409,7 +407,7 @@ export class UIController {
 				// Generate label based on key with better formatting
 				const labelText = key.toLowerCase().replace(/_/g, ' ');
 				
-				if (key === 'CONNECTION_COLOR') {
+				if (key === 'CONNECTION_COLOR' || key === 'PARTICLE_COLOR') {
 					html += `
 						<div class="control-group">
 							<label for="${key}">${labelText}</label>
@@ -419,13 +417,15 @@ export class UIController {
 							</div>
 						</div>
 					`;
-				} else if (key === 'ENABLE_VORTEX_FORCE') {
+				} else if (key === 'ENABLE_VORTEX_FORCE' || key === 'PARTICLE_SINGLE_COLOR') {
+					const label = key === 'PARTICLE_SINGLE_COLOR' ? 'one color' : labelText;
+					const note = key === 'PARTICLE_SINGLE_COLOR' ? 'same for all' : 'special mouse force';
 					html += `
 						<div class="control-group">
-							<label for="${key}">${labelText}</label>
+							<label for="${key}">${label}</label>
 							<div class="slider-row">
 								<input type="checkbox" id="${key}" ${range.default ? 'checked' : ''}>
-								<span class="value-display">special mouse force</span>
+								<span class="value-display">${note}</span>
 							</div>
 						</div>
 					`;
@@ -441,6 +441,14 @@ export class UIController {
 						</div>
 					`;
 				}
+			}
+
+			if (category === 'color') {
+				html += `
+					<div class="button-row" style="margin-top: 0;">
+						<button id="randomizeColors" class="button">randomize colors</button>
+					</div>
+				`;
 			}
 
 			html += '</div></div>';
@@ -514,19 +522,27 @@ export class UIController {
 			}, { passive: true });
 		}
 		
-		// Set up special controls: color picker
-		const colorPicker = document.getElementById("CONNECTION_COLOR");
-		if (colorPicker) {
+		// Set up special controls: color pickers
+		for (const colorKey of ["CONNECTION_COLOR", "PARTICLE_COLOR"]) {
+			const colorPicker = document.getElementById(colorKey);
+			if (!colorPicker) continue;
 			const handleColorChange = (e) => {
 				const value = e.target.value;
-				this.onSettingChange("CONNECTION_COLOR", value);
-				
-				const valueDisplay = document.getElementById("CONNECTION_COLOR_VALUE");
+				this.onSettingChange(colorKey, value);
+
+				// picking a particle color means you want one color
+				const single = document.getElementById("PARTICLE_SINGLE_COLOR");
+				if (colorKey === "PARTICLE_COLOR" && single && !single.checked) {
+					single.checked = true;
+					this.onSettingChange("PARTICLE_SINGLE_COLOR", true);
+				}
+
+				const valueDisplay = document.getElementById(`${colorKey}_VALUE`);
 				if (valueDisplay) {
 					valueDisplay.textContent = value;
 				}
 			};
-			
+
 			const newColorPicker = colorPicker.cloneNode(true);
 			colorPicker.parentNode.replaceChild(newColorPicker, colorPicker);
 			
@@ -538,15 +554,15 @@ export class UIController {
 		}
 		
 		// Checkbox controls
-		const vortexForceCheckbox = document.getElementById("ENABLE_VORTEX_FORCE");
-		if (vortexForceCheckbox) {
+		for (const checkboxKey of ["ENABLE_VORTEX_FORCE", "PARTICLE_SINGLE_COLOR"]) {
+			const checkbox = document.getElementById(checkboxKey);
+			if (!checkbox) continue;
 			const handleCheckboxChange = (e) => {
-				const value = e.target.checked;
-				this.onSettingChange("ENABLE_VORTEX_FORCE", value);
+				this.onSettingChange(checkboxKey, e.target.checked);
 			};
 
-			const newCheckbox = vortexForceCheckbox.cloneNode(true);
-			vortexForceCheckbox.parentNode.replaceChild(newCheckbox, vortexForceCheckbox);
+			const newCheckbox = checkbox.cloneNode(true);
+			checkbox.parentNode.replaceChild(newCheckbox, checkbox);
 
 			newCheckbox.addEventListener('change', handleCheckboxChange);
 			newCheckbox.addEventListener('touchstart', (e) => {
@@ -642,8 +658,7 @@ export class UIController {
 		if (randomizeButton) {
 			randomizeButton.addEventListener('click', () => {
 				if (window.particleSystem) {
-					// Just recreate particles with new random colors
-					window.particleSystem.restart();
+					window.particleSystem.randomizeColors();
 					this.showSuccessMessage("colors randomized");
 				}
 			});
@@ -652,7 +667,7 @@ export class UIController {
 			randomizeButton.addEventListener('touchend', (e) => {
 				e.preventDefault();
 				if (window.particleSystem) {
-					window.particleSystem.restart();
+					window.particleSystem.randomizeColors();
 					this.showSuccessMessage("colors randomized");
 				}
 			}, { passive: false });

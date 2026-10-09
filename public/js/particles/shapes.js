@@ -190,24 +190,24 @@ export class ShapeField {
 		return null;
 	}
 
-	// Push a particle out of any shape it has entered and reflect its velocity.
+	// Push particle i of store s out of any shape it has entered and reflect its velocity.
 	// Mirrors the canvas-wall response in particle.js, including the tangential
 	// jitter that keeps particles from rattling in place against a surface.
-	collide(particle, elasticity) {
+	collide(s, i, elasticity) {
 		if (this.shapes.length === 0) return;
 
 		for (const shape of this.shapes) {
-			if (!this.contains(shape, particle.x, particle.y, particle.radius)) continue;
+			if (!this.contains(shape, s.x[i], s.y[i], s.radius[i])) continue;
 
 			let nx;
 			let ny;
 			let depth;
 
 			if (shape.type === "circle") {
-				const dx = particle.x - shape.x;
-				const dy = particle.y - shape.y;
+				const dx = s.x[i] - shape.x;
+				const dy = s.y[i] - shape.y;
 				const dist = Math.hypot(dx, dy);
-				const target = shape.r + particle.radius;
+				const target = shape.r + s.radius[i];
 				if (dist < 1e-6) {
 					nx = 1;
 					ny = 0;
@@ -221,32 +221,32 @@ export class ShapeField {
 				// Exit across the least-penetrated edge plane.
 				let best = -Infinity;
 				let bi = 0;
-				for (let i = 0; i < shape.offsets.length; i++) {
-					const d = shape.normals[i * 2] * particle.x + shape.normals[i * 2 + 1] * particle.y - shape.offsets[i];
+				for (let k = 0; k < shape.offsets.length; k++) {
+					const d = shape.normals[k * 2] * s.x[i] + shape.normals[k * 2 + 1] * s.y[i] - shape.offsets[k];
 					if (d > best) {
 						best = d;
-						bi = i;
+						bi = k;
 					}
 				}
 				nx = shape.normals[bi * 2];
 				ny = shape.normals[bi * 2 + 1];
-				depth = particle.radius - best;
+				depth = s.radius[i] - best;
 			}
 
 			if (depth <= 0) continue;
 
-			particle.x += nx * (depth + 0.1);
-			particle.y += ny * (depth + 0.1);
+			s.x[i] += nx * (depth + 0.1);
+			s.y[i] += ny * (depth + 0.1);
 
-			const vn = particle.vx * nx + particle.vy * ny;
+			const vn = s.vx[i] * nx + s.vy[i] * ny;
 			if (vn < 0) {
 				const j = -(1 + elasticity) * vn;
-				particle.vx += nx * j;
-				particle.vy += ny * j;
+				s.vx[i] += nx * j;
+				s.vy[i] += ny * j;
 
 				const jitter = (Math.random() - 0.5) * 0.1 * Math.abs(vn);
-				particle.vx += -ny * jitter;
-				particle.vy += nx * jitter;
+				s.vx[i] += -ny * jitter;
+				s.vy[i] += nx * jitter;
 			}
 		}
 	}
