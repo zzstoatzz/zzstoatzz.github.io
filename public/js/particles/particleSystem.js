@@ -139,18 +139,13 @@ export class ParticleSystem {
 		this.canvas.width = w || window.innerWidth;
 		this.canvas.height = h || window.innerHeight;
 
-		// Stretch the particles with the canvas. Left alone, a shrink clamps
-		// everything outside onto the new edges as a crust the soft walls take
-		// ages to dissolve, and a grow leaves the new area empty.
-		const sx = this.canvas.width / oldW;
-		const sy = this.canvas.height / oldH;
-		if (oldW > 0 && oldH > 0 && (sx !== 1 || sy !== 1)) {
-			const s = this.store;
-			for (let i = 0; i < s.count; i++) {
-				s.x[i] *= sx;
-				s.y[i] *= sy;
-			}
-		}
+		// A shrinking edge is a piston: it scoops up every particle it swept past
+		// and throws it back inward, faster the farther the edge moved past it.
+		// Clamping them in place instead stacks them in a line on the new edge
+		// that the soft walls only slowly dissolve.
+		const w2 = this.canvas.width;
+		const h2 = this.canvas.height;
+		if (w2 < oldW || h2 < oldH) this.pistonWalls(w2, h2);
 
 		if (this.overlayCanvas) {
 			this.overlayCanvas.width = this.canvas.width;
@@ -163,6 +158,26 @@ export class ParticleSystem {
 
 		if (this.shapeField) {
 			this.shapeField.resize(this.canvas.width, this.canvas.height);
+		}
+	}
+
+	// Bring particles left outside a shrunken canvas back inside, moving
+	// inward at the speed of an edge that swept past them over PISTON_FRAMES.
+	pistonWalls(w, h) {
+		const PISTON_FRAMES = 12;
+		const s = this.store;
+		for (let i = 0; i < s.count; i++) {
+			const r = s.radius[i];
+			const overX = s.x[i] + r - w;
+			if (overX > 0) {
+				s.x[i] = w - r - 0.1;
+				s.vx[i] = Math.min(s.vx[i], 0) - overX / PISTON_FRAMES;
+			}
+			const overY = s.y[i] + r - h;
+			if (overY > 0) {
+				s.y[i] = h - r - 0.1;
+				s.vy[i] = Math.min(s.vy[i], 0) - overY / PISTON_FRAMES;
+			}
 		}
 	}
 
