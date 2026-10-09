@@ -8,6 +8,8 @@
 //
 // Views stay valid until the next resize: the wasm step never grows memory.
 
+import { PARTICLE_COLORS, PARTICLE_RGB, CUSTOM_COLOR, RANGES, hexToRgb } from "./config.js";
+
 const F64_FIELDS = ["x", "y", "vx", "vy", "radius", "mass", "sizeVar"];
 const WASM_PTR = {
 	x: "xPtr",
@@ -27,6 +29,9 @@ export class ParticleStore {
 		// so renderers re-upload those only when needed
 		this.version = 0;
 		this.wasm = null;
+		// color index -> rgb / css color; the last slot is the single color
+		this.palette = [...PARTICLE_RGB, hexToRgb(RANGES.PARTICLE_COLOR.default)];
+		this.paletteHex = [...PARTICLE_COLORS, RANGES.PARTICLE_COLOR.default];
 		this._capacity = 0;
 		this._alloc(64);
 	}
@@ -70,6 +75,22 @@ export class ParticleStore {
 		this.count = n;
 	}
 
+	// Set the color used by CUSTOM_COLOR particles.
+	setCustomColor(hex) {
+		if (this.paletteHex[CUSTOM_COLOR] === hex) return;
+		this.paletteHex[CUSTOM_COLOR] = hex;
+		this.palette[CUSTOM_COLOR] = hexToRgb(hex);
+		this._writePalette();
+		this.version++;
+	}
+
+	// wasm builds connection colors from its own copy of the palette
+	_writePalette() {
+		if (!this.wasm) return;
+		const out = new Float64Array(this.wasm.memory.buffer, this.wasm.palettePtr(), 256 * 3);
+		this.palette.forEach((rgb, k) => out.set(rgb, k * 3));
+	}
+
 	// Move the state into wasm memory; from here on the arrays are wasm views.
 	attach(wasm) {
 		const n = this.count;
@@ -80,6 +101,7 @@ export class ParticleStore {
 		this.resize(n);
 		for (const f of F64_FIELDS) this[f].set(old[f]);
 		this.color.set(old.color);
+		this._writePalette();
 	}
 
 	// Back to JS arrays (wasm failed mid-run).

@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { PARTICLE_RGB } from './config.js';
 
 const MAX_PARTICLES = 50000;
 const MAX_CONNECTIONS = 200000;
@@ -166,8 +165,8 @@ export class WebGLParticleRenderer {
 		if (s.version !== this._storeVersion) {
 			this._storeVersion = s.version;
 			const colArr = geo.getAttribute('customColor').array;
-			const color = s.color;
-			for (let i = 0; i < count; i++) colArr.set(PARTICLE_RGB[color[i]], i * 3);
+			const { color, palette } = s;
+			for (let i = 0; i < count; i++) colArr.set(palette[color[i]], i * 3);
 			geo.getAttribute('size').array.set(s.radius.subarray(0, count));
 			markRange(geo.getAttribute('customColor'), count * 3);
 			markRange(geo.getAttribute('size'), count);

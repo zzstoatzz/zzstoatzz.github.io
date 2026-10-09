@@ -1,6 +1,5 @@
 // Canvas 2D renderer for particles and connections.
 // Extracted from particleSystem.js — serves as fallback when WebGL is unavailable.
-import { PARTICLE_COLORS } from "./config.js";
 
 export class CanvasRenderer {
 	constructor(ctx) {
@@ -25,7 +24,7 @@ export class CanvasRenderer {
 		}
 
 		for (const [c, batch] of byColor) {
-			this.ctx.fillStyle = PARTICLE_COLORS[c];
+			this.ctx.fillStyle = s.paletteHex[c];
 			this.ctx.beginPath();
 			for (const i of batch) {
 				const x = s.x[i];

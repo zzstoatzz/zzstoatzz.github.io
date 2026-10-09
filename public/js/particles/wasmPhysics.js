@@ -6,8 +6,6 @@
 // The wasm module owns the particle state: once attached, the ParticleStore's
 // arrays are views into wasm memory, so a step is one call with no copying.
 
-import { PARTICLE_RGB } from "./config.js";
-
 // Inputs to the mouse force, derived exactly as applyMouseForce does.
 export function mouseParams(ps, now) {
 	ps.mouseEffects.checkReleaseExpiry();
@@ -74,12 +72,9 @@ export class WasmPhysics {
 		this._conn = null;
 	}
 
-	// Move the store's particles into wasm memory and write the palette.
+	// Move the store's particles (and palette) into wasm memory.
 	attach(store) {
-		const w = this.w;
-		store.attach(w);
-		const palette = new Float64Array(w.memory.buffer, w.palettePtr(), 256 * 3);
-		PARTICLE_RGB.forEach((rgb, k) => palette.set(rgb, k * 3));
+		store.attach(this.w);
 	}
 
 	// Replay recorded Math.random() draws instead of the internal PRNG (tests).

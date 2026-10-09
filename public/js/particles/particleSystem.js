@@ -1,8 +1,8 @@
-import { spawnParticle, applyParticleSettings, updateParticle } from "./particle.js";
+import { spawnParticle, applyParticleSettings, updateParticle, randomColor } from "./particle.js";
 import { ParticleStore } from "./particleStore.js";
 import { SettingsManager } from "./settingsManager.js";
 import { UIController } from "./uiController.js";
-import { PARTICLE_COLORS, PARTICLE_RGB } from "./config.js";
+import { PARTICLE_COLORS } from "./config.js";
 import { SpatialHash } from "./spatialHash.js";
 import { CanvasRenderer } from "./canvasRenderer.js";
 import { MouseEffects } from "./mouseEffects.js";
@@ -307,9 +307,32 @@ export class ParticleSystem {
 		for (let i = 0; i < s.count; i++) applyParticleSettings(s, i, settings);
 		s.version++;
 
+		s.setCustomColor(settings.PARTICLE_COLOR);
+		const single = !!settings.PARTICLE_SINGLE_COLOR;
+		if (single !== !!this._singleColor) {
+			this._singleColor = single;
+			this.recolor(settings);
+		}
+
 		const targetCount = settings.PARTICLE_COUNT;
 		if (targetCount > s.count) this.spawnParticles(targetCount - s.count, settings);
 		else if (targetCount < s.count) s.resize(targetCount);
+	}
+
+	// New colors for every particle: a fresh random mix, or all the single color.
+	recolor(settings = this._settings) {
+		const s = this.store;
+		for (let i = 0; i < s.count; i++) s.color[i] = randomColor(settings);
+		s.version++;
+	}
+
+	// "randomize colors": back to the mix if one color was on, then reshuffle.
+	randomizeColors() {
+		if (this._settings.PARTICLE_SINGLE_COLOR) {
+			this.settingsManager.updateSetting("PARTICLE_SINGLE_COLOR", false);
+			this.uiController.updateUI(this.settingsManager.getAllSettings());
+		}
+		this.recolor(this.settingsManager.getAllSettings());
 	}
 
 	// Append n particles at random positions.
@@ -487,7 +510,7 @@ export class ParticleSystem {
 
 		const interactionRadiusSq = interactionRadius * interactionRadius;
 		const forceScale = attract * this.deltaTime;
-		const { x, y, vx, vy, mass, color } = this.store;
+		const { x, y, vx, vy, mass, color, palette } = this.store;
 		const posArr = this._connPos;
 		const alphaArr = this._connAlpha;
 		const colArr = this._connColor;
@@ -533,8 +556,8 @@ export class ParticleSystem {
 					alphaArr[vi] = a;
 					alphaArr[vi + 1] = a;
 
-					const c1 = PARTICLE_RGB[color[i]];
-					const c2 = PARTICLE_RGB[color[j]];
+					const c1 = palette[color[i]];
+					const c2 = palette[color[j]];
 					colArr[base] = c1[0];
 					colArr[base + 1] = c1[1];
 					colArr[base + 2] = c1[2];
@@ -604,7 +627,8 @@ export class ParticleSystem {
 
 		const elapsed = timestamp - (this.lastTimestamp || timestamp);
 		this.lastTimestamp = timestamp;
-		const deltaTime = Math.min(elapsed, 100);
+		// never negative: a restarted loop starts from timestamp 0
+		const deltaTime = Math.max(0, Math.min(elapsed, 100));
 
 		this._settings = this.settingsManager.getAllSettings();
 
@@ -661,8 +685,12 @@ export class ParticleSystem {
 		}
 	}
 
+	// Respawn every particle. Events are bound once, in init.
 	restart() {
 		this.stop();
-		this.init();
+		this.lastTimestamp = 0;
+		this.store.resize(0);
+		this.spawnParticles(this._settings.PARTICLE_COUNT, this._settings);
+		this.animate();
 	}
 }
