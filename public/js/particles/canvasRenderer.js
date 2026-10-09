@@ -37,42 +37,22 @@ export class CanvasRenderer {
 		}
 	}
 
-	// Draw connection lines between nearby particles.
-	// Uses the spatial hash to enumerate pairs efficiently.
-	drawConnections(s, spatialHash, settings) {
-		const connectionOpacity = settings.CONNECTION_OPACITY;
-		if (connectionOpacity <= 0.001 || settings.INTERACTION_RADIUS <= 0) return;
+	// Draw the connection lines the physics step built: vertex pairs of
+	// (x, y, z) in pos with one alpha per vertex, batched by rounded opacity.
+	drawConnections(pos, alpha, vertCount, settings) {
+		if (vertCount === 0) return;
 
-		const interactionRadius = settings.INTERACTION_RADIUS;
-		const interactionRadiusSq = interactionRadius * interactionRadius;
-		const connectionColor = settings.CONNECTION_COLOR;
-		const connectionWidth = settings.CONNECTION_WIDTH || 1;
-
-		this.ctx.strokeStyle = connectionColor;
-		this.ctx.lineWidth = connectionWidth;
+		this.ctx.strokeStyle = settings.CONNECTION_COLOR;
+		this.ctx.lineWidth = settings.CONNECTION_WIDTH || 1;
 
 		const linesByOpacity = {};
+		for (let v = 0; v < vertCount; v += 2) {
+			const opacityKey = Math.round(alpha[v] * 20) / 20;
+			if (!linesByOpacity[opacityKey]) linesByOpacity[opacityKey] = [];
+			const k = v * 3;
+			linesByOpacity[opacityKey].push(pos[k], pos[k + 1], pos[k + 3], pos[k + 4]);
+		}
 
-		spatialHash.forEachPair((i, j) => {
-			const dx = s.x[j] - s.x[i];
-			const dy = s.y[j] - s.y[i];
-			const distSq = dx * dx + dy * dy;
-
-			if (distSq < interactionRadiusSq) {
-				const distance = Math.sqrt(distSq);
-				const opacity = connectionOpacity * (1 - distance / interactionRadius);
-
-				if (opacity > 0.001) {
-					const opacityKey = Math.round(opacity * 20) / 20;
-					if (!linesByOpacity[opacityKey]) {
-						linesByOpacity[opacityKey] = [];
-					}
-					linesByOpacity[opacityKey].push(s.x[i], s.y[i], s.x[j], s.y[j]);
-				}
-			}
-		});
-
-		// Batch draw by opacity
 		for (const opacityKey in linesByOpacity) {
 			this.ctx.globalAlpha = Number.parseFloat(opacityKey);
 			this.ctx.beginPath();

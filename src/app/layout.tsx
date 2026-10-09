@@ -49,6 +49,8 @@ export default function RootLayout({
     return (
         <html lang="en" className={`${firaCode.variable} font-sans`}>
             <head>
+                {/* eslint-disable-next-line @next/next/no-css-tags */}
+                <link id="particle-settings-styles" rel="stylesheet" href="/js/particles/particles.css" />
                 <script
                     type="importmap"
                     dangerouslySetInnerHTML={{

@@ -11,15 +11,31 @@ pub fn build(b: *std.Build) void {
     }) });
     b.step("test", "run unit tests").dependOn(&b.addRunArtifact(tests).step);
 
+    // physics.wasm: current browsers, with simd128 (safari 16.4+, chrome and
+    // firefox 91+). physics-nosimd.wasm: the same code for the baseline wasm
+    // every browser since 2017 runs.
+    const step = b.step("wasm", "build public/js/particles/physics{,-nosimd}.wasm");
+    addWasm(b, step, "physics", &std.Target.wasm.cpu.generic, &.{.simd128});
+    addWasm(b, step, "physics-nosimd", &std.Target.wasm.cpu.mvp, &.{});
+    b.getInstallStep().dependOn(step);
+}
+
+fn addWasm(
+    b: *std.Build,
+    step: *std.Build.Step,
+    name: []const u8,
+    model: *const std.Target.Cpu.Model,
+    features: []const std.Target.wasm.Feature,
+) void {
     const wasm = b.addExecutable(.{
-        .name = "physics",
+        .name = name,
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/wasm.zig"),
             .target = b.resolveTargetQuery(.{
                 .cpu_arch = .wasm32,
                 .os_tag = .freestanding,
-                // simd128 is in every current browser (safari 16.4+)
-                .cpu_features_add = std.Target.wasm.featureSet(&.{.simd128}),
+                .cpu_model = .{ .explicit = model },
+                .cpu_features_add = std.Target.wasm.featureSet(features),
             }),
             .optimize = .ReleaseFast,
             .strip = true,
@@ -27,7 +43,6 @@ pub fn build(b: *std.Build) void {
     });
     wasm.entry = .disabled;
     wasm.rdynamic = true;
-    const install = b.addInstallFile(wasm.getEmittedBin(), "../../public/js/particles/physics.wasm");
-    b.getInstallStep().dependOn(&install.step);
-    b.step("wasm", "build public/js/particles/physics.wasm").dependOn(&install.step);
+    const install = b.addInstallFile(wasm.getEmittedBin(), b.fmt("../../public/js/particles/{s}.wasm", .{name}));
+    step.dependOn(&install.step);
 }

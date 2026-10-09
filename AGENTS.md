@@ -1,132 +1,41 @@
 # AGENTS.md
 
-## Project Overview
+nate's personal site, [zzstoatzz.io](https://zzstoatzz.io): a static Next.js export (App Router, TypeScript, Tailwind) with an interactive particle background whose physics runs in zig/wasm. Pushes to `main` deploy to GitHub Pages (`.github/workflows/deploy.yml`).
 
-This is a Next.js website with an interactive particle system. The main feature is a sophisticated canvas-based particle animation with mouse interaction effects.
+## Layout
 
-## Architecture
-
-### Frontend Structure
 ```
-src/app/
-├── components/
-│   ├── ParticlesContainer.tsx    # React wrapper for particle system
-│   ├── Background.tsx            # Background component
-│   ├── NavigationMenu.tsx        # Site navigation
-│   └── ...other UI components
-├── contexts/                     # React contexts
-├── layout.tsx, page.tsx          # App Router root
-└── about/, contact/, posts/, ... # App Router routes
+src/app/                  pages (/, about, contact, posts/[slug], tuner, zen → /)
+src/app/components/       layout pieces; ParticlesContainer.tsx mounts the particles
+src/styles/               globals.css (tailwind), footnotes.css
+src/utils/                posts loader, pitch detector (tuner)
+posts/                    markdown posts
+public/js/particles/      the particle system (plain ES modules, loaded at runtime)
+public/manifest.webmanifest, public/sw.js   PWA manifest and offline service worker
+zig/                      the particle physics, compiled to public/js/particles/*.wasm
 ```
 
-### Particle System (JavaScript)
-```
-public/js/particles/
-├── main.js                  # Entry point, initializes system
-├── particleSystem.js        # Core system logic (~600 lines)
-├── particle.js              # Individual particle behavior
-├── settingsManager.js       # Configuration management
-├── uiController.js          # UI controls/settings panel
-├── config.js                # Color schemes and constants
-├── wasmPhysics.js           # loads physics.wasm, runs the per-frame physics in zig
-└── physics.wasm             # built from zig/ (committed; CI checks it's current)
-```
+## Particles
 
-### Zig physics (`zig/`)
-The per-frame physics (`updateParticles`: spatial hash, pair attraction + connection buffer, wall push, mouse force, particle update, shape collisions) runs in `zig/src/physics.zig`, compiled to `public/js/particles/physics.wasm`. The JS path is kept as the reference and as the fallback (`?physics=js` forces it).
+`ParticlesContainer.tsx` loads `public/js/particles/main.js`, which exposes `window.particlesInit(canvas, overlay)`.
 
-Particle state lives in a `ParticleStore` (`particleStore.js`): one typed array per field, indexed by particle. Once wasm loads, the store's arrays are views into wasm memory, where zig keeps the particles in a `std.MultiArrayList`, so physics, renderers and settings share that memory with no per-frame copy. `ParticleStore.resize` (zig `resize`) is the only call that moves the columns; `step` never allocates (a zig test enforces this), so views stay valid between resizes. Colors are indices into `PARTICLE_COLORS`.
+- `particleSystem.js`: the frame loop, input, canvas resizing (shrinking edges push like a piston)
+- `wasmPhysics.js`: loads the wasm and runs one physics step per frame
+- `particleStore.js`: particle state, one typed array per field; once wasm loads these are views into wasm memory, so nothing is copied per frame
+- `particle.js`: spawning and size/color setup
+- `webglRenderer.js` (three.js) draws particles and connection lines; `canvasRenderer.js` is the 2D fallback when WebGL is unavailable
+- `mouseEffects.js`: hold/release visuals and the release multiplier
+- `shapes.js`, `shapeEditor.js`: placeable obstacle shapes
+- `settingsManager.js`, `uiController.js`, `config.js` (ranges and defaults), `particles.css`: the settings panel
 
-- `cd zig && zig build wasm` rebuilds the wasm (zig 0.16); commit the result
-- `node zig/parity/parity.mjs 500 1` property-tests the wasm against the real JS modules in V8, bit for bit (positions, velocities, connection buffers)
-- `node zig/parity/bench.mjs` compares speed
-- `zig/demo/build.sh` makes a single-file demo page
+The homepage is one fixed screen (`html.home-locked`, set in `src/app/page.tsx`): no page scroll or pinch zoom, and layers sized to `100lvh` so they reach under iOS Safari's toolbar.
 
-Any change to the physics in `particleSystem.js`, `particle.js`, `spatialHash.js` or `shapes.js` collide needs the same change in `physics.zig`, or parity fails.
+## Physics (`zig/`)
 
-## How It Works
+`zig/src/physics.zig` owns the per-frame physics: spatial hash, pair attraction plus the connection-line buffer, soft walls, mouse force, particle update and shape collisions. `zig/src/wasm.zig` is the export surface JS calls. Particles live in a `std.MultiArrayList`; `resize` is the only call that allocates, and a test enforces that `step` never does, since JS holds raw views into the columns between resizes.
 
-### Integration Pattern
-- **TypeScript → JavaScript**: `ParticlesContainer.tsx` loads the JS particle system via Next.js `<Script>` tag
-- **Global Interface**: JavaScript exposes `window.particlesInit()` for React to call
-- **Canvas Rendering**: Pure canvas 2D context, no WebGL
+Two builds: `physics.wasm` (simd128, current browsers) and `physics-nosimd.wasm` (baseline wasm, older engines); `wasmPhysics.js` picks one by feature detection. Without wasm the particles draw but don't move.
 
-### Particle System Core
-
-#### Spatial Optimization
-- **Grid-based partitioning**: Particles divided into cells for efficient collision detection
-- **Neighbor checking**: Only check adjacent grid cells for interactions
-- **Performance scaling**: Handles thousands of particles smoothly
-
-#### Mouse Interaction System
-- **Hold tracking**: Measures how long mouse is held down
-- **Intensity scaling**: Effects grow logarithmically with hold duration
-- **Two main effects**:
-  1. **Pinwheel**: Colorful spinning vortex that grows more complex over time
-  2. **Aura**: Soft background glow that fades in slowly around the pinwheel
-
-#### Visual Effects Architecture
-
-**Pinwheel System**:
-- Multiple rotating points creating trails
-- Color cycling through spectrum based on intensity
-- Lightning effects at high intensity
-- Organic movement with wobble/drift
-
-**Aura System**:
-- Silk-like layered gradients
-- Starts at 0.8 seconds, fully emerges by 1.5 seconds
-- Rainbow color cycling from blue → purple → orange
-- Breathing/pulsing animation
-
-#### Settings System
-- Real-time parameter adjustment
-- Particle count, attraction/repulsion forces
-- Connection opacity and colors
-- Explosion radius and force
-- All changes apply immediately without restart
-
-## Key Files Deep Dive
-
-### `particleSystem.js`
-- **Main class**: `ParticleSystem` (~600 lines)
-- **Key methods**:
-  - `updateAndDrawMouseEffects()`: Handles hold effects and aura rendering
-  - `applyMouseForce()`: Mouse interaction physics
-  - `updateGrid()`: Spatial partitioning
-  - `applyAttraction()`: Inter-particle forces
-
-### `ParticlesContainer.tsx`
-- React wrapper component
-- Handles canvas sizing and script loading
-- Provides router integration for navigation
-- Manages initialization timing
-
-## Development Notes
-
-### Performance Considerations
-- Grid system crucial for particle count scaling
-- Batch drawing operations by color/opacity
-- FPS limiting and delta time calculations
-- Efficient memory management for effects arrays
-
-### Common Modification Patterns
-- **Timing changes**: Modify hold duration thresholds in `updateAndDrawMouseEffects()`
-- **Color schemes**: Update HSL calculations in gradient creation
-- **Effect intensity**: Adjust opacity multipliers in gradient stops
-- **Size/scale**: Modify radius calculations and layer sizing
-
-### Architecture Quirks
-- Mixed TypeScript (React) and vanilla JavaScript (particles)
-- Global window interface for communication
-- Canvas coordinates vs screen coordinates handling
-- Touch event handling for mobile compatibility
-
-## Quick Start for Modifications
-
-1. **Visual changes**: Focus on `updateAndDrawMouseEffects()` method
-2. **Physics changes**: Modify `applyMouseForce()` and `applyAttraction()`
-3. **UI changes**: Update `uiController.js` and corresponding React components
-4. **Performance**: Adjust grid cell size in `updateGrid()` method
-
-The system is designed to be real-time responsive - most changes can be tested immediately without restart. 
+- `cd zig && zig build test` runs the tests (zig 0.16)
+- `cd zig && zig build wasm` rebuilds both wasm files; commit them (CI checks they're current)
+- `zig/demo/build.sh` makes a single-file demo page in `zig/demo/dist/`

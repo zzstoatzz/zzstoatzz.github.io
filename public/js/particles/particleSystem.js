@@ -1,9 +1,8 @@
-import { spawnParticle, applyParticleSettings, updateParticle, randomColor } from "./particle.js";
+import { spawnParticle, applyParticleSettings, randomColor } from "./particle.js";
 import { ParticleStore } from "./particleStore.js";
 import { SettingsManager } from "./settingsManager.js";
 import { UIController } from "./uiController.js";
 import { PARTICLE_COLORS } from "./config.js";
-import { SpatialHash } from "./spatialHash.js";
 import { CanvasRenderer } from "./canvasRenderer.js";
 import { MouseEffects } from "./mouseEffects.js";
 import { ShapeField } from "./shapes.js";
@@ -15,7 +14,6 @@ export class ParticleSystem {
 		this.canvas = canvas;
 		this.ctx = this.canvas.getContext("2d");
 		this.store = new ParticleStore();
-		this.spatialHash = new SpatialHash();
 		this.mouseX = 0;
 		this.mouseY = 0;
 		this.isMouseDown = false;
@@ -38,10 +36,10 @@ export class ParticleSystem {
 
 		this.mouseEffects = new MouseEffects(this.overlayCtx);
 
-		// Pre-allocated connection buffers (used in combined physics pass)
-		this._connPos = new Float32Array(200000 * 2 * 3);
-		this._connAlpha = new Float32Array(200000 * 2);
-		this._connColor = new Float32Array(200000 * 2 * 3);
+		// Connection line buffers; views into wasm memory once physics runs
+		this._connPos = new Float32Array(0);
+		this._connAlpha = new Float32Array(0);
+		this._connColor = new Float32Array(0);
 		this._connVertCount = 0;
 
 		this.PARTICLE_COLORS = PARTICLE_COLORS;
@@ -73,21 +71,19 @@ export class ParticleSystem {
 		// Try to initialize WebGL (non-blocking)
 		this._initWebGL();
 
-		// Zig/wasm physics (non-blocking). Same results as the JS path;
-		// ?physics=js forces the JS path.
+		// Zig/wasm physics (non-blocking)
 		this.wasmPhysics = null;
 		this._initWasmPhysics();
 	}
 
 	async _initWasmPhysics() {
 		try {
-			if (new URLSearchParams(window.location.search).get("physics") === "js") return;
-			const wasm = await WasmPhysics.load(new URL("./physics.wasm", import.meta.url));
+			const wasm = await WasmPhysics.load();
 			wasm.attach(this.store);
 			this.wasmPhysics = wasm;
 			console.log("wasm physics initialized");
 		} catch (e) {
-			console.warn("wasm physics not available, using JS:", e);
+			console.warn("wasm physics not available, particles will stay still:", e);
 		}
 	}
 
@@ -379,277 +375,16 @@ export class ParticleSystem {
 		}
 	}
 
-	applyMouseForce() {
-		this.mouseEffects.checkReleaseExpiry();
-
-		if (!this.isMouseDown && this.mouseEffects.releaseMultiplier <= 1) return;
-
-		const settings = this._settings;
-
-		let radius, force;
-		if (!settings.ENABLE_VORTEX_FORCE) {
-			radius = settings.EXPLOSION_RADIUS;
-			force = settings.EXPLOSION_FORCE;
-		} else {
-			let holdIntensity = 0;
-			if (this.isMouseDown && this.mouseEffects.holdStartTime) {
-				const holdDuration = (performance.now() - this.mouseEffects.holdStartTime) / 1000;
-				holdIntensity = Math.min(1, Math.log(holdDuration + 1) / Math.log(10));
-			}
-
-			if (this.isMouseDown) {
-				const smoothedIntensity = holdIntensity * holdIntensity;
-				radius = settings.EXPLOSION_RADIUS * (1 + smoothedIntensity * 2);
-			} else {
-				radius = settings.EXPLOSION_RADIUS * this.mouseEffects.releaseMultiplier;
-			}
-
-			force = settings.EXPLOSION_FORCE * (this.isMouseDown ? 1 : this.mouseEffects.releaseMultiplier);
-		}
-
-		const radiusSq = radius * radius;
-		// force is a kick per 60fps frame; scale it so 120Hz screens get the same push
-		const frames = this.deltaTime * 60;
-
-		const s = this.store;
-		for (const i of this.spatialHash.queryRadius(this.mouseX, this.mouseY, radius, s)) {
-			const dx = s.x[i] - this.mouseX;
-			const dy = s.y[i] - this.mouseY;
-			const distSq = dx * dx + dy * dy;
-
-			if (distSq < radiusSq && distSq > 1e-6) {
-				const distance = Math.sqrt(distSq);
-				const strength = force * (1 - distance / radius) * frames;
-				const dirX = dx / distance;
-				const dirY = dy / distance;
-
-				if (!settings.ENABLE_VORTEX_FORCE) {
-					s.vx[i] += dirX * strength;
-					s.vy[i] += dirY * strength;
-				} else {
-					const radialForce = strength * (this.isMouseDown ? 0.3 : 1.0);
-					s.vx[i] += dirX * radialForce;
-					s.vy[i] += dirY * radialForce;
-
-					if (this.isMouseDown && this.mouseEffects.holdStartTime) {
-						const holdDuration = (performance.now() - this.mouseEffects.holdStartTime) / 1000;
-						const vortexIntensity = Math.min(1, Math.log(holdDuration + 1) / Math.log(10));
-						const speedMultiplier = 1 + holdDuration * 0.5;
-						const vortexStrength = strength * vortexIntensity * 0.8 * speedMultiplier;
-
-						const tangentX = -dirY;
-						const tangentY = dirX;
-						s.vx[i] += tangentX * vortexStrength;
-						s.vy[i] += tangentY * vortexStrength;
-					}
-				}
-			}
-		}
-	}
-
-	// With repulsion on, a particle near a wall is pushed by the crowd on one
-	// side and by nothing on the other, so the crowd squeezes a crust of
-	// particles flat against each wall. Each wall stands in for the missing
-	// neighbors: it pushes with the force of the crowd's average density spread
-	// over the part of the interaction disc that lies beyond the wall. For a
-	// half-plane at distance d that integral is
-	//   2 ln((R + q) / d) - 2q / R,  q = sqrt(R^2 - d^2)
-	// with d clamped to the smoothing distance like a pair.
-	// Mirrored in zig/src/physics.zig (wallForce).
-	applyWallForce() {
-		const settings = this._settings;
-		const r = settings.INTERACTION_RADIUS;
-		const attract = settings.ATTRACT;
-		const smoothingFactor = settings.SMOOTHING_FACTOR || 0.3;
-		if (!(attract <= -1e-6) || r <= 0) return;
-
-		const s = this.store;
-		const n = s.count;
-		const w = this.canvas.width;
-		const h = this.canvas.height;
-		let totalMass = 0;
-		for (let i = 0; i < n; i++) totalMass += s.mass[i];
-		const strength = (attract * this.deltaTime * totalMass) / (w * h);
-		const minDist = smoothingFactor * r;
-		const push = (d) => {
-			const dd = Math.max(d, minDist);
-			if (dd >= r) return 0;
-			const q = Math.sqrt(r * r - dd * dd);
-			return strength * (2 * Math.log((r + q) / dd) - (2 * q) / r);
-		};
-
-		for (let i = 0; i < n; i++) {
-			const x = s.x[i];
-			const y = s.y[i];
-			if (x < r) s.vx[i] -= push(x);
-			if (w - x < r) s.vx[i] += push(w - x);
-			if (y < r) s.vy[i] -= push(y);
-			if (h - y < r) s.vy[i] += push(h - y);
-		}
-	}
-
-	applyAttraction() {
-		const settings = this._settings;
-		const interactionRadius = settings.INTERACTION_RADIUS;
-		const attract = settings.ATTRACT;
-		const smoothingFactor = settings.SMOOTHING_FACTOR || 0.3;
-
-		if (Math.abs(attract) < 1e-6 || interactionRadius <= 0) return;
-
-		const interactionRadiusSq = interactionRadius * interactionRadius;
-		const forceScale = attract * this.deltaTime;
-		const { x, y, vx, vy, mass } = this.store;
-
-		this.spatialHash.forEachPair((i, j) => {
-			const dx = x[j] - x[i];
-			const dy = y[j] - y[i];
-			const distSq = dx * dx + dy * dy;
-
-			if (distSq >= interactionRadiusSq || distSq < 1e-6) return;
-
-			const distance = Math.sqrt(distSq);
-			const smoothedDistance = Math.max(distance, smoothingFactor * interactionRadius);
-			if (smoothedDistance < 1e-6) return;
-
-			const forceMagnitude = (forceScale * (mass[i] * mass[j])) / (smoothedDistance * smoothedDistance);
-			const G = forceMagnitude / distance;
-			const forceX = G * dx;
-			const forceY = G * dy;
-
-			if (Number.isNaN(forceX) || Number.isNaN(forceY)) return;
-
-			vx[i] += forceX / mass[i];
-			vy[i] += forceY / mass[i];
-			vx[j] += -forceX / mass[j];
-			vy[j] += -forceY / mass[j];
-		});
-	}
-
-	// Combined attraction + connection building in one pair iteration.
-	// Avoids iterating all neighbor pairs twice per frame.
-	applyAttractionAndBuildConnections() {
-		const settings = this._settings;
-		const interactionRadius = settings.INTERACTION_RADIUS;
-		const attract = settings.ATTRACT;
-		const smoothingFactor = settings.SMOOTHING_FACTOR || 0.3;
-		const connectionOpacity = settings.CONNECTION_OPACITY;
-
-		const hasAttraction = Math.abs(attract) >= 1e-6 && interactionRadius > 0;
-		const hasConnections = connectionOpacity > 0.001 && interactionRadius > 0;
-
-		if (!hasAttraction && !hasConnections) {
-			this._connVertCount = 0;
-			return;
-		}
-
-		const interactionRadiusSq = interactionRadius * interactionRadius;
-		const forceScale = attract * this.deltaTime;
-		const { x, y, vx, vy, mass, color, palette } = this.store;
-		const posArr = this._connPos;
-		const alphaArr = this._connAlpha;
-		const colArr = this._connColor;
-		let vi = 0;
-		const maxVerts = 200000 * 2;
-
-		this.spatialHash.forEachPair((i, j) => {
-			const dx = x[j] - x[i];
-			const dy = y[j] - y[i];
-			const distSq = dx * dx + dy * dy;
-
-			if (distSq >= interactionRadiusSq || distSq < 1e-6) return;
-
-			const distance = Math.sqrt(distSq);
-
-			if (hasAttraction) {
-				const smoothedDistance = Math.max(distance, smoothingFactor * interactionRadius);
-				if (smoothedDistance >= 1e-6) {
-					const forceMagnitude = (forceScale * (mass[i] * mass[j])) / (smoothedDistance * smoothedDistance);
-					const G = forceMagnitude / distance;
-					const forceX = G * dx;
-					const forceY = G * dy;
-
-					if (!Number.isNaN(forceX) && !Number.isNaN(forceY)) {
-						vx[i] += forceX / mass[i];
-						vy[i] += forceY / mass[i];
-						vx[j] += -forceX / mass[j];
-						vy[j] += -forceY / mass[j];
-					}
-				}
-			}
-
-			if (hasConnections && vi < maxVerts) {
-				const a = connectionOpacity * (1 - distance / interactionRadius);
-				if (a > 0.001) {
-					const base = vi * 3;
-					posArr[base] = x[i];
-					posArr[base + 1] = y[i];
-					posArr[base + 2] = 0;
-					posArr[base + 3] = x[j];
-					posArr[base + 4] = y[j];
-					posArr[base + 5] = 0;
-					alphaArr[vi] = a;
-					alphaArr[vi + 1] = a;
-
-					const c1 = palette[color[i]];
-					const c2 = palette[color[j]];
-					colArr[base] = c1[0];
-					colArr[base + 1] = c1[1];
-					colArr[base + 2] = c1[2];
-					colArr[base + 3] = c2[0];
-					colArr[base + 4] = c2[1];
-					colArr[base + 5] = c2[2];
-
-					vi += 2;
-				}
-			}
-		});
-
-		this._connVertCount = vi;
-	}
-
+	// The physics is zig/wasm (zig/src/physics.zig, see wasmPhysics.js). Until
+	// the module loads, or if it can't, the particles are drawn but stay put.
 	updateParticles(deltaTime) {
 		this.deltaTime = deltaTime / 1000.0;
-
-		const settings = this._settings;
-		const cellSize = settings.INTERACTION_RADIUS > 0 ? settings.INTERACTION_RADIUS : 50;
-
-		const s = this.store;
-
-		if (this.wasmPhysics) {
-			// Canvas 2D still draws connections from the JS hash.
-			if (!this.useWebGL) this.spatialHash.update(s, s.count, cellSize);
-			try {
-				this.wasmPhysics.step(this, deltaTime);
-				return;
-			} catch (e) {
-				console.warn("wasm physics failed, falling back to JS:", e);
-				this.wasmPhysics = null;
-				s.detach();
-				this._connPos = new Float32Array(200000 * 2 * 3);
-				this._connAlpha = new Float32Array(200000 * 2);
-				this._connColor = new Float32Array(200000 * 2 * 3);
-			}
-		}
-
-		this.spatialHash.update(s, s.count, cellSize);
-
-		if (this.useWebGL) {
-			// Combined pass: attraction + connection buffer in one pair iteration
-			this.applyAttractionAndBuildConnections();
-		} else {
-			// Canvas 2D: separate passes (connections drawn by canvasRenderer)
-			this.applyAttraction();
-		}
-
-		this.applyWallForce();
-		this.applyMouseForce();
-
-		const elasticity = settings.ELASTICITY !== undefined ? settings.ELASTICITY : 0.8;
-		const hasShapes = this.shapeField.count > 0;
-
-		for (let i = 0; i < s.count; i++) {
-			updateParticle(s, i, this.deltaTime, this.canvas.width, this.canvas.height, settings);
-			if (hasShapes) this.shapeField.collide(s, i, elasticity);
+		if (!this.wasmPhysics) return;
+		try {
+			this.wasmPhysics.step(this, deltaTime);
+		} catch (e) {
+			console.warn("wasm physics failed:", e);
+			this.wasmPhysics = null;
 		}
 	}
 
@@ -697,7 +432,7 @@ export class ParticleSystem {
 				this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
 			}
 
-			this.canvasRenderer.drawConnections(this.store, this.spatialHash, this._settings);
+			this.canvasRenderer.drawConnections(this._connPos, this._connAlpha, this._connVertCount, this._settings);
 
 			this.mouseEffects.updateAndDraw(
 				timestamp, this.mouseX, this.mouseY, this.isMouseDown, this._settings,

@@ -1,10 +1,10 @@
 // Particle state as one typed array per field (struct of arrays).
 //
-// With wasm physics attached, every array is a view straight into the wasm
+// Once the wasm physics attaches, every array is a view straight into the wasm
 // module's memory (zig/src/physics.zig keeps the particles in a
 // std.MultiArrayList), so physics, renderers and settings all read and write
-// the same memory and nothing is copied per frame. Without wasm the arrays are
-// plain JS typed arrays and the JS physics runs on them.
+// the same memory and nothing is copied per frame. Until then the arrays are
+// plain JS typed arrays.
 //
 // Views stay valid until the next resize: the wasm step never grows memory.
 
@@ -102,23 +102,6 @@ export class ParticleStore {
 		for (const f of F64_FIELDS) this[f].set(old[f]);
 		this.color.set(old.color);
 		this._writePalette();
-	}
-
-	// Back to JS arrays (wasm failed mid-run).
-	detach() {
-		if (!this.wasm) return;
-		const n = this.count;
-		const cur = {};
-		for (const f of F64_FIELDS) cur[f] = this[f].slice(0, n);
-		cur.color = this.color.slice(0, n);
-		this.wasm = null;
-		for (const f of F64_FIELDS) this[f] = null;
-		this.color = null;
-		this.count = 0;
-		this._alloc(Math.max(64, n));
-		this.count = n;
-		for (const f of F64_FIELDS) this[f].set(cur[f]);
-		this.color.set(cur.color);
 	}
 
 	// Views go stale if wasm memory ever grows outside a resize; cheap guard.

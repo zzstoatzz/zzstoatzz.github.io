@@ -190,67 +190,6 @@ export class ShapeField {
 		return null;
 	}
 
-	// Push particle i of store s out of any shape it has entered and reflect its velocity.
-	// Mirrors the canvas-wall response in particle.js, including the tangential
-	// jitter that keeps particles from rattling in place against a surface.
-	collide(s, i, elasticity) {
-		if (this.shapes.length === 0) return;
-
-		for (const shape of this.shapes) {
-			if (!this.contains(shape, s.x[i], s.y[i], s.radius[i])) continue;
-
-			let nx;
-			let ny;
-			let depth;
-
-			if (shape.type === "circle") {
-				const dx = s.x[i] - shape.x;
-				const dy = s.y[i] - shape.y;
-				const dist = Math.hypot(dx, dy);
-				const target = shape.r + s.radius[i];
-				if (dist < 1e-6) {
-					nx = 1;
-					ny = 0;
-					depth = target;
-				} else {
-					nx = dx / dist;
-					ny = dy / dist;
-					depth = target - dist;
-				}
-			} else {
-				// Exit across the least-penetrated edge plane.
-				let best = -Infinity;
-				let bi = 0;
-				for (let k = 0; k < shape.offsets.length; k++) {
-					const d = shape.normals[k * 2] * s.x[i] + shape.normals[k * 2 + 1] * s.y[i] - shape.offsets[k];
-					if (d > best) {
-						best = d;
-						bi = k;
-					}
-				}
-				nx = shape.normals[bi * 2];
-				ny = shape.normals[bi * 2 + 1];
-				depth = s.radius[i] - best;
-			}
-
-			if (depth <= 0) continue;
-
-			s.x[i] += nx * (depth + 0.1);
-			s.y[i] += ny * (depth + 0.1);
-
-			const vn = s.vx[i] * nx + s.vy[i] * ny;
-			if (vn < 0) {
-				const j = -(1 + elasticity) * vn;
-				s.vx[i] += nx * j;
-				s.vy[i] += ny * j;
-
-				const jitter = (Math.random() - 0.5) * 0.1 * Math.abs(vn);
-				s.vx[i] += -ny * jitter;
-				s.vy[i] += nx * jitter;
-			}
-		}
-	}
-
 	draw(ctx, preview = null, selected = null) {
 		for (const shape of this.shapes) {
 			const hex = shape.color;

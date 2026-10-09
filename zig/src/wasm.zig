@@ -4,7 +4,6 @@ const Physics = @import("physics.zig");
 
 const gpa = std.heap.wasm_allocator;
 var p: Physics = .{};
-var tape: []f64 = &.{};
 
 /// resize to n particles, keeping existing ones; returns false on oom. the
 /// column pointers below move only here: `step` never grows memory.
@@ -143,16 +142,7 @@ export fn setShape(
 }
 
 export fn seed(s: u32) void {
-    p.rng = .{ .prng = std.Random.DefaultPrng.init(s) };
-}
-
-/// switch to replaying `len` recorded Math.random() draws (parity tests).
-/// write them through the returned pointer.
-export fn useTape(len: u32) ?[*]f64 {
-    gpa.free(tape);
-    tape = gpa.alloc(f64, len) catch return null;
-    p.rng = .{ .tape = .{ .values = tape } };
-    return tape.ptr;
+    p.rng = .init(s);
 }
 
 export fn step(delta_ms: f64) bool {

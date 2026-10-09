@@ -1,13 +1,12 @@
-// Zig/wasm physics backend. Runs the same per-frame physics as
-// ParticleSystem.updateParticles (spatial hash, pair attraction + connection
-// buffer, wall push, mouse force, particle update, shape collisions),
-// bit-for-bit with the JS path under V8. Source: zig/src/physics.zig.
+// The particle physics, compiled from zig/src/physics.zig: spatial hash, pair
+// attraction + connection buffer, wall push, mouse force, particle update and
+// shape collisions, one call per frame.
 //
 // The wasm module owns the particle state: once attached, the ParticleStore's
 // arrays are views into wasm memory, so a step is one call with no copying.
 
-// Inputs to the mouse force, derived exactly as applyMouseForce does.
-export function mouseParams(ps, now) {
+// Inputs to the mouse force, from the hold/release state in mouseEffects.
+function mouseParams(ps, now) {
 	ps.mouseEffects.checkReleaseExpiry();
 	const fx = ps.mouseEffects;
 	const active = ps.isMouseDown || fx.releaseMultiplier > 1;
@@ -54,8 +53,18 @@ export function mouseParams(ps, now) {
 	return out;
 }
 
+// smallest module using a simd128 instruction: (func (result v128) v128.const 0)
+const SIMD_PROBE = new Uint8Array([
+	0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 22, 1, 20, 0, 253, 12, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11,
+]);
+
 export class WasmPhysics {
-	static async load(url = new URL("./physics.wasm", import.meta.url)) {
+	// physics.wasm uses simd128 (safari 16.4+, chrome/firefox 91+); older
+	// engines get the same physics built without it.
+	static async load() {
+		const name = WebAssembly.validate(SIMD_PROBE) ? "physics.wasm" : "physics-nosimd.wasm";
+		const url = new URL(`./${name}`, import.meta.url);
 		const res = await fetch(url);
 		const bytes = await res.arrayBuffer();
 		return WasmPhysics.fromBytes(bytes);
@@ -77,12 +86,6 @@ export class WasmPhysics {
 		store.attach(this.w);
 	}
 
-	// Replay recorded Math.random() draws instead of the internal PRNG (tests).
-	useTape(values) {
-		const ptr = this.w.useTape(values.length);
-		new Float64Array(this.w.memory.buffer, ptr, values.length).set(values);
-	}
-
 	// Connection buffer views, rebuilt if wasm memory moved.
 	_connViews() {
 		const w = this.w;
@@ -98,8 +101,8 @@ export class WasmPhysics {
 		return this._conn;
 	}
 
-	// Equivalent of ps.updateParticles(deltaTime) on the given system, whose
-	// store must be attached to this module.
+	// One physics step for the given system, whose store must be attached to
+	// this module.
 	step(ps, deltaTime, now = performance.now()) {
 		const w = this.w;
 		const s = ps._settings;
@@ -113,7 +116,7 @@ export class WasmPhysics {
 			s.ELASTICITY !== undefined ? s.ELASTICITY : 0.8,
 			ps.canvas.width,
 			ps.canvas.height,
-			!!ps.useWebGL,
+			true, // build connection lines (both renderers draw them)
 		);
 
 		const shapes = ps.shapeField.shapes;

@@ -11,22 +11,17 @@ permissions:
   contents: read
 
 jobs:
-  parity:
+  zig:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
       - run: zig fmt --check zig/src zig/build.zig
       - run: zig build test
         working-directory: zig
-      - name: committed physics.wasm is up to date
+      - name: committed wasm is up to date
         run: |
           cd zig && zig build wasm && cd ..
-          git diff --exit-code public/js/particles/physics.wasm
-      - name: js vs wasm parity (bit-exact)
-        run: node zig/parity/parity.mjs 500 ${{ github.run_number }}
+          git diff --exit-code public/js/particles/physics.wasm public/js/particles/physics-nosimd.wasm

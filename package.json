@@ -7,8 +7,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "export": "next export",
-    "build:particles": "tsc src/scripts/particles.ts --outDir public/js",
     "prepare": "husky"
   },
   "dependencies": {
