@@ -419,7 +419,7 @@ export class UIController {
 					`;
 				} else if (key === 'ENABLE_VORTEX_FORCE' || key === 'PARTICLE_SINGLE_COLOR') {
 					const label = key === 'PARTICLE_SINGLE_COLOR' ? 'one color' : labelText;
-					const note = key === 'PARTICLE_SINGLE_COLOR' ? 'all particles use the color below' : 'special mouse force';
+					const note = key === 'PARTICLE_SINGLE_COLOR' ? 'same for all' : 'special mouse force';
 					html += `
 						<div class="control-group">
 							<label for="${key}">${label}</label>
