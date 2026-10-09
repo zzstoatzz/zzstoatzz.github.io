@@ -7,6 +7,7 @@ import { CanvasRenderer } from "./canvasRenderer.js";
 import { MouseEffects } from "./mouseEffects.js";
 import { ShapeField } from "./shapes.js";
 import { ShapeEditor } from "./shapeEditor.js";
+import { WasmPhysics } from "./wasmPhysics.js";
 
 export class ParticleSystem {
 	constructor(canvas, overlayCanvas) {
@@ -71,6 +72,21 @@ export class ParticleSystem {
 
 		// Try to initialize WebGL (non-blocking)
 		this._initWebGL();
+
+		// Zig/wasm physics (non-blocking). Same results as the JS path;
+		// ?physics=js forces the JS path.
+		this.wasmPhysics = null;
+		this._initWasmPhysics();
+	}
+
+	async _initWasmPhysics() {
+		try {
+			if (new URLSearchParams(window.location.search).get("physics") === "js") return;
+			this.wasmPhysics = await WasmPhysics.load(new URL("./physics.wasm", import.meta.url));
+			console.log("wasm physics initialized");
+		} catch (e) {
+			console.warn("wasm physics not available, using JS:", e);
+		}
 	}
 
 	async _initWebGL() {
@@ -522,6 +538,21 @@ export class ParticleSystem {
 
 		const settings = this._settings;
 		const cellSize = settings.INTERACTION_RADIUS > 0 ? settings.INTERACTION_RADIUS : 50;
+
+		if (this.wasmPhysics) {
+			// Canvas 2D still draws connections from the JS hash.
+			if (!this.useWebGL) this.spatialHash.update(this.particles, this.particles.length, cellSize);
+			try {
+				this.wasmPhysics.step(this, deltaTime);
+				return;
+			} catch (e) {
+				console.warn("wasm physics failed, falling back to JS:", e);
+				this.wasmPhysics = null;
+				this._connPos = new Float32Array(200000 * 2 * 3);
+				this._connAlpha = new Float32Array(200000 * 2);
+				this._connColor = new Float32Array(200000 * 2 * 3);
+			}
+		}
 
 		this.spatialHash.update(this.particles, this.particles.length, cellSize);
 
