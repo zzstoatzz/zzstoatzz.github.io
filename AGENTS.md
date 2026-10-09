@@ -45,6 +45,6 @@ The homepage is one fixed screen (`html.home-locked`, set by `components/Home.ts
 
 Two builds: `physics.wasm` (simd128, current browsers) and `physics-nosimd.wasm` (baseline wasm, older engines); `wasmPhysics.ts` picks one by feature detection. Without wasm the particles draw but don't move.
 
-- `cd zig && zig build test` runs the tests (zig 0.16)
+- `cd zig && zig build test` runs the tests (zig 0.17)
 - `cd zig && zig build wasm` rebuilds both wasm files; commit them (CI checks they're current)
 - `zig/demo/build.sh` makes a single-file demo page in `zig/demo/dist/`

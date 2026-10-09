@@ -401,7 +401,7 @@ inline fn sweep(p: *Physics, ctx: *const PairCtx, a: u32, lo: u32, hi: u32) void
 
         // walk the hit lanes with a bitmask instead of a branch per lane;
         // hits are ~random so per-lane branches mispredict constantly
-        const Mask = std.meta.Int(.unsigned, lanes);
+        const Mask = @Int(.unsigned, lanes);
         const valid = @select(bool, in_range, not_tiny, in_range);
         var m: Mask = @bitCast(valid);
         const att_m: Mask = @bitCast(att_ok);

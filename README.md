@@ -4,7 +4,7 @@ my website: a static [astro](https://astro.build) site with an interactive parti
 
 ```sh
 bun install && bun run dev    # site at localhost:4321
-cd zig && zig build test      # physics tests (zig 0.16)
+cd zig && zig build test      # physics tests (zig 0.17)
 cd zig && zig build wasm      # rebuild src/particles/*.wasm
 ```
 
