@@ -184,7 +184,7 @@ export default function NavigationMenu() {
             {/* Nav trigger button */}
             <button
                 onClick={handleToggle}
-                className="glass-thin fixed top-2 left-1/2 transform -translate-x-1/2 z-[100] text-cyan-300/80 px-3 py-1.5
+                className="glass-thin fixed top-[calc(0.5rem+env(safe-area-inset-top,0px))] left-1/2 transform -translate-x-1/2 z-[100] text-cyan-300/80 px-3 py-1.5
                        hover:text-cyan-300 transition-all
                        focus:outline-none focus:ring-1 focus:ring-cyan-300/30 text-xs"
                 style={{ borderRadius: '999px' }}

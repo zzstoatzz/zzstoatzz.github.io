@@ -21,7 +21,7 @@ export default function BackgroundSwitcher() {
     };
 
     return (
-        <div className="fixed top-4 left-4 z-50">
+        <div className="fixed top-[calc(1rem+env(safe-area-inset-top,0px))] left-4 z-50">
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}

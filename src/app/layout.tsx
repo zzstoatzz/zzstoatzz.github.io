@@ -20,6 +20,14 @@ export const metadata: Metadata = {
     title: 'n8',
     icons: {
         icon: '/assets/images/stoat.png',
+        apple: '/assets/images/stoat-180.png',
+    },
+    // from the home screen: run full screen, particles under the status bar
+    manifest: '/manifest.webmanifest',
+    appleWebApp: {
+        capable: true,
+        title: 'n8',
+        statusBarStyle: 'black-translucent',
     },
 };
 
@@ -28,6 +36,7 @@ export const viewport: Viewport = {
     width: 'device-width',
     initialScale: 1,
     viewportFit: 'cover',
+    themeColor: '#0B0B03',
 };
 
 export default function RootLayout({

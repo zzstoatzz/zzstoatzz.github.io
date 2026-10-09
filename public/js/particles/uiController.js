@@ -37,7 +37,7 @@ export class UIController {
 					overflow: hidden !important;
 					transition: all 0.3s ease !important;
 					position: fixed !important;
-					top: 20px !important;
+					top: calc(20px + env(safe-area-inset-top, 0px)) !important;
 					right: 20px !important;
 					z-index: 9999 !important;
 					transform: translateY(0) !important;
@@ -45,7 +45,7 @@ export class UIController {
 				
 				@media (max-width: 640px) {
 					.particle-controls {
-						top: 10px !important;
+						top: calc(10px + env(safe-area-inset-top, 0px)) !important;
 						right: 10px !important;
 						width: 90% !important;
 					}
@@ -284,7 +284,7 @@ export class UIController {
 				
 				.settings-icon {
 					position: fixed !important;
-					top: 20px !important;
+					top: calc(20px + env(safe-area-inset-top, 0px)) !important;
 					right: 20px !important;
 					width: 48px !important;
 					height: 48px !important;
@@ -305,7 +305,7 @@ export class UIController {
 				
 				@media (max-width: 640px) {
 					.settings-icon {
-						top: 10px !important;
+						top: calc(10px + env(safe-area-inset-top, 0px)) !important;
 						right: 10px !important;
 					}
 				}
