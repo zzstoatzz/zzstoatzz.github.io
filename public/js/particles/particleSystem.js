@@ -133,9 +133,24 @@ export class ParticleSystem {
 		const parent = this.canvas.parentElement;
 		const w = parent ? parent.clientWidth : window.innerWidth;
 		const h = parent ? parent.clientHeight : window.innerHeight;
+		const oldW = this.canvas.width;
+		const oldH = this.canvas.height;
 
 		this.canvas.width = w || window.innerWidth;
 		this.canvas.height = h || window.innerHeight;
+
+		// Stretch the particles with the canvas. Left alone, a shrink clamps
+		// everything outside onto the new edges as a crust the soft walls take
+		// ages to dissolve, and a grow leaves the new area empty.
+		const sx = this.canvas.width / oldW;
+		const sy = this.canvas.height / oldH;
+		if (oldW > 0 && oldH > 0 && (sx !== 1 || sy !== 1)) {
+			const s = this.store;
+			for (let i = 0; i < s.count; i++) {
+				s.x[i] *= sx;
+				s.y[i] *= sy;
+			}
+		}
 
 		if (this.overlayCanvas) {
 			this.overlayCanvas.width = this.canvas.width;
