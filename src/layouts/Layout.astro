@@ -1,0 +1,70 @@
+---
+import { ClientRouter } from 'astro:transitions';
+import '@fontsource/fira-code/latin-300.css';
+import '@fontsource/fira-code/latin-400.css';
+import '@fontsource/fira-code/latin-500.css';
+import '../styles/globals.css';
+import '../particles/particles.css';
+import Shell from '../components/Shell';
+import Footer from '../components/Footer';
+
+interface Props {
+    title?: string;
+}
+
+const { title = 'n8' } = Astro.props;
+// '/about.html' or '/about' -> '/about'; '/index.html' -> '/'
+const path = Astro.url.pathname.replace(/(index)?\.html$/, '').replace(/\/$/, '') || '/';
+const isHome = path === '/';
+// /about has its own "find me" footer
+const showFooter = path !== '/about';
+---
+
+<html lang="en" class="font-sans">
+    <head>
+        <meta charset="utf-8" />
+        <!-- cover: draw under the notch, home indicator and iOS safari's bars -->
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta name="theme-color" content="#0B0B03" />
+        <title>{title}</title>
+        <meta name="application-name" content="n8" />
+        <!-- from the home screen: run full screen, particles under the status bar -->
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="n8" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <link rel="icon" href="/assets/images/stoat.png" />
+        <link rel="apple-touch-icon" href="/assets/images/stoat-180.png" />
+        <ClientRouter />
+        <script is:inline async src="https://www.googletagmanager.com/gtag/js?id=G-SLML4CSJ70"></script>
+        <script is:inline>
+            window.dataLayer = window.dataLayer || [];
+            function gtag() {
+                dataLayer.push(arguments);
+            }
+            gtag('js', new Date());
+            gtag('config', 'G-SLML4CSJ70');
+        </script>
+    </head>
+    <body class="bg-[#0B0B03]">
+        <Shell client:load transition:persist="shell" path={path} />
+        <div class="relative z-20 min-h-screen flex flex-col overflow-x-hidden">
+            {
+                isHome ? (
+                    <slot />
+                ) : (
+                    <>
+                        {/* full page translucent backdrop */}
+                        <div class="fixed inset-0 bg-[rgba(175,181,240,0.01)] backdrop-blur-[3px] z-[5] rounded-lg" />
+                        <div class="relative min-h-screen flex flex-col z-10">
+                            <main class="flex-grow container mx-auto px-4 py-8">
+                                <slot />
+                            </main>
+                            {showFooter && <Footer />}
+                        </div>
+                    </>
+                )
+            }
+        </div>
+    </body>
+</html>

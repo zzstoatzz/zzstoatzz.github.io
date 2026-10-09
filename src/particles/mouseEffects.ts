@@ -2,6 +2,7 @@
 // hold/release state the physics reads for the vortex force. Draws to its own
 // Canvas 2D overlay context.
 import type { Settings } from "./config";
+import { mountOnBody } from "./dom";
 
 interface Effect {
 	x: number;
@@ -563,7 +564,7 @@ export class MouseEffects {
 		const el = document.createElement("div");
 		el.id = "ghost-leaderboard";
 		el.textContent = this.leaderboardText();
-		document.body.appendChild(el);
+		mountOnBody(el);
 
 		document.addEventListener("mousemove", (e) => {
 			const threshold = 150;

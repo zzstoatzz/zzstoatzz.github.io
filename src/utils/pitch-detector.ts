@@ -270,7 +270,7 @@ export class PitchDetector {
 			this.isRunning = true;
 		} catch (err) {
 			console.error("Failed to start pitch detection:", err);
-			throw new Error(`Failed to start pitch detection: ${err.message || err}`);
+			throw new Error(`Failed to start pitch detection: ${err instanceof Error ? err.message : err}`);
 		}
 	}
 

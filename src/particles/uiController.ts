@@ -4,6 +4,7 @@
 import type { SettingKey, Settings } from "./config";
 import { RANGES } from "./config";
 import type { ParticleSystem } from "./particleSystem";
+import { mountOnBody } from "./dom";
 
 type SettingChange = <K extends SettingKey>(key: K, value: Settings[K]) => void;
 
@@ -28,20 +29,20 @@ export class UIController {
 			const container = document.createElement("div");
 			container.id = 'particle-controls-container';
 			container.innerHTML = this.generateControlsTemplate();
-			document.body.appendChild(container);
+			mountOnBody(container);
 			
 			// Create success message div for notifications
 			const successMsg = document.createElement("div");
 			successMsg.id = "success-message";
 			successMsg.className = "success-message";
-			document.body.appendChild(successMsg);
+			mountOnBody(successMsg);
 			
 			// Create always visible settings icon
 			const settingsIcon = document.createElement("div");
 			settingsIcon.id = "settings-icon";
 			settingsIcon.className = "settings-icon";
 			settingsIcon.innerHTML = "⚙";
-			document.body.appendChild(settingsIcon);
+			mountOnBody(settingsIcon);
 		}
 
 		this.particleControls = document.querySelector<HTMLElement>(".particle-controls");

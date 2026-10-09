@@ -1,4 +1,4 @@
-name: Deploy Next.js site to Pages
+name: Deploy site to Pages
 
 on:
   push:
@@ -24,24 +24,17 @@ jobs:
           bun-version: latest
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-      - name: Cache Next.js build files
-        uses: actions/cache@v3
-        with:
-          path: .next/cache
-          key: nextjs-build-${{ github.sha }}
-          restore-keys: |
-            nextjs-build-
+          node-version: "22"
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Lint
         run: bun run lint
-      - name: Build and Export
+      - name: Build
         run: bun run build
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./out
+          path: ./dist
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

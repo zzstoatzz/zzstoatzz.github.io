@@ -1,8 +1,8 @@
 // Offline support for the installed app. Pages and other unhashed files are
-// network-first so a deploy shows up right away; next's hashed bundles
-// (including three.js and the physics wasm) never change, so they are served
-// from cache once seen.
-const CACHE = "n8-v2";
+// network-first so a deploy shows up right away; astro's hashed bundles in
+// /_astro/ (including three.js and the physics wasm) never change, so they
+// are served from cache once seen.
+const CACHE = "n8-v3";
 const SHELL = ["/", "/manifest.webmanifest", "/assets/images/stoat-192.png"];
 
 self.addEventListener("install", (e) => {
@@ -19,7 +19,7 @@ self.addEventListener("activate", (e) => {
 	);
 });
 
-const immutable = (url) => url.origin === self.location.origin && url.pathname.startsWith("/_next/static/");
+const immutable = (url) => url.origin === self.location.origin && url.pathname.startsWith("/_astro/");
 
 self.addEventListener("fetch", (e) => {
 	const req = e.request;

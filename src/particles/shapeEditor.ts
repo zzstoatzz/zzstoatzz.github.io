@@ -2,6 +2,7 @@
 // select, move, resize and recolour shapes. Styles are in particles.css.
 import type { Shape, ShapeField, ShapeOutline, ShapeType } from "./shapes";
 import { DEFAULT_SHAPE_COLOR, MIN_SHAPE_RADIUS, SHAPE_TYPES } from "./shapes";
+import { mountOnBody } from "./dom";
 
 const DEFAULT_TAP_RADIUS = 45;
 const TAP_SLOP = 10;
@@ -93,7 +94,7 @@ export class ShapeEditor {
 			<button type="button" class="dock-edit-only" data-action="delete" title="delete shape" aria-label="delete shape">${ICONS.trash}</button>
 			<button type="button" data-action="done" title="done" aria-label="done">${ICONS.done}</button>
 		`;
-		document.body.appendChild(dock);
+		mountOnBody(dock);
 		this.dock = dock;
 		this.pop = this.part(".color-pop");
 		this.colorInput = this.part<HTMLInputElement>('input[type="color"]');
@@ -101,7 +102,7 @@ export class ShapeEditor {
 		const caption = document.createElement("div");
 		caption.className = "shape-caption";
 		caption.textContent = "drag to size · tap a shape to edit";
-		document.body.appendChild(caption);
+		mountOnBody(caption);
 		this.caption = caption;
 
 		dock.addEventListener("pointerdown", (e) => e.stopPropagation());
