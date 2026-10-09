@@ -532,41 +532,48 @@ fn mouseForce(p: *Physics) void {
     const ccx: i64 = toInt32(m.x * inv);
     const ccy: i64 = toInt32(m.y * inv);
     const reach: i64 = @intFromFloat(@ceil(m.radius / p.cell_size));
-    const r2 = m.radius * m.radius;
-    const frames = p.dt * 60;
+    // a vortex released after a long hold reaches thousands of cells past the
+    // canvas (radius 25000 at interaction radius 10: 25M cells, ~80ms). once
+    // the square of cells outnumbers the particles, visit the particles
+    // instead; each one's push depends only on itself, so the order is free.
+    const side: u64 = @intCast(2 * reach + 1);
+    if (side * side > p.n) {
+        for (0..p.n) |i| p.mousePush(i);
+        return;
+    }
     var nx = ccx - reach;
     while (nx <= ccx + reach) : (nx += 1) {
         var ny = ccy - reach;
         while (ny <= ccy + reach) : (ny += 1) {
             const key = hashKey(@truncate(nx), @truncate(ny));
             const items = p.cellItems(key) orelse continue;
-            for (items) |i| {
-                // query filter
-                const qx = p.x[i] - m.x;
-                const qy = p.y[i] - m.y;
-                if (!(qx * qx + qy * qy < r2)) continue;
-                const dx = p.x[i] - m.x;
-                const dy = p.y[i] - m.y;
-                const d2 = dx * dx + dy * dy;
-                if (!(d2 < r2 and d2 > 1e-6)) continue;
-                const dist = @sqrt(d2);
-                const strength = m.force * (1 - dist / m.radius) * frames;
-                const dir_x = dx / dist;
-                const dir_y = dy / dist;
-                if (!m.vortex) {
-                    p.vx[i] += dir_x * strength;
-                    p.vy[i] += dir_y * strength;
-                } else {
-                    const radial = strength * @as(f64, if (m.down) 0.3 else 1.0);
-                    p.vx[i] += dir_x * radial;
-                    p.vy[i] += dir_y * radial;
-                    if (m.spinning) {
-                        const vs = strength * m.vortex_intensity * 0.8 * m.speed_multiplier;
-                        p.vx[i] += -dir_y * vs;
-                        p.vy[i] += dir_x * vs;
-                    }
-                }
-            }
+            for (items) |i| p.mousePush(i);
+        }
+    }
+}
+
+inline fn mousePush(p: *Physics, i: usize) void {
+    const m = p.mouse;
+    const r2 = m.radius * m.radius;
+    const dx = p.x[i] - m.x;
+    const dy = p.y[i] - m.y;
+    const d2 = dx * dx + dy * dy;
+    if (!(d2 < r2 and d2 > 1e-6)) return;
+    const dist = @sqrt(d2);
+    const strength = m.force * (1 - dist / m.radius) * (p.dt * 60);
+    const dir_x = dx / dist;
+    const dir_y = dy / dist;
+    if (!m.vortex) {
+        p.vx[i] += dir_x * strength;
+        p.vy[i] += dir_y * strength;
+    } else {
+        const radial = strength * @as(f64, if (m.down) 0.3 else 1.0);
+        p.vx[i] += dir_x * radial;
+        p.vy[i] += dir_y * radial;
+        if (m.spinning) {
+            const vs = strength * m.vortex_intensity * 0.8 * m.speed_multiplier;
+            p.vx[i] += -dir_y * vs;
+            p.vy[i] += dir_x * vs;
         }
     }
 }
@@ -795,5 +802,40 @@ test "step keeps particles in the box" {
     for (p.x[0..p.n], p.y[0..p.n]) |x, y| {
         try std.testing.expect(x >= 0 and x <= 800);
         try std.testing.expect(y >= 0 and y <= 600);
+    }
+}
+
+test "a mouse wider than the crowd pushes like the cell walk does" {
+    // 40 particles near the mouse; the same 40 plus 400 parked far away make
+    // the cells fewer than the particles, so the walk runs instead
+    const a = std.testing.allocator;
+    var near: Physics = .{};
+    defer near.deinit(a);
+    var crowd: Physics = .{};
+    defer crowd.deinit(a);
+    try near.resize(a, 40);
+    try crowd.resize(a, 440);
+    var prng = std.Random.DefaultPrng.init(3);
+    const r = prng.random();
+    for (0..440) |i| {
+        const x = if (i < 40) 300 + r.float(f64) * 200 else 5000 + r.float(f64) * 100;
+        const y = if (i < 40) 200 + r.float(f64) * 200 else 5000 + r.float(f64) * 100;
+        for ([_]*Physics{ &near, &crowd }) |p| if (i < p.n) {
+            p.x[i] = x;
+            p.y[i] = y;
+        };
+    }
+    for ([_]*Physics{ &near, &crowd }) |p| {
+        p.settings = .{ .interaction_radius = 60, .width = 6000, .height = 6000 };
+        p.mouse = .{ .active = true, .x = 400, .y = 300, .radius = 250, .force = 2, .vortex = true, .down = true, .spinning = true, .vortex_intensity = 0.7, .speed_multiplier = 3 };
+        p.dt = 0.0166;
+        try p.updateHash(a);
+        p.mouseForce();
+    }
+    // 250 / 60 rounds up to 5 cells each way: 121 cells, between 40 and 440
+    for (0..40) |i| {
+        try std.testing.expect(near.vx[i] != 0 or near.vy[i] != 0);
+        try std.testing.expectEqual(near.vx[i], crowd.vx[i]);
+        try std.testing.expectEqual(near.vy[i], crowd.vy[i]);
     }
 }
