@@ -248,6 +248,67 @@ pub fn hypot(a: f64, b: f64) f64 {
     return @sqrt(sum) * max;
 }
 
+/// v8's Math.log (fdlibm __ieee754_log, which v8 ships as base::ieee754::log)
+pub fn log(x_in: f64) f64 {
+    const ln2_hi: f64 = 6.93147180369123816490e-01;
+    const ln2_lo: f64 = 1.90821492927058770002e-10;
+    const two54: f64 = 1.80143985094819840000e+16;
+    const lg1: f64 = 6.666666666666735130e-01;
+    const lg2: f64 = 3.999999999940941908e-01;
+    const lg3: f64 = 2.857142874366239149e-01;
+    const lg4: f64 = 2.222219843214978396e-01;
+    const lg5: f64 = 1.818357216161805012e-01;
+    const lg6: f64 = 1.531383769920937332e-01;
+    const lg7: f64 = 1.479819860511658591e-01;
+
+    var x = x_in;
+    var hx: i32 = @bitCast(@as(u32, @truncate(@as(u64, @bitCast(x)) >> 32)));
+    const lx: u32 = @truncate(@as(u64, @bitCast(x)));
+    var k: i32 = 0;
+    if (hx < 0x00100000) {
+        if (((hx & 0x7fffffff) | @as(i32, @bitCast(lx))) == 0) return -std.math.inf(f64);
+        if (hx < 0) return std.math.nan(f64);
+        k -= 54;
+        x *= two54;
+        hx = @bitCast(@as(u32, @truncate(@as(u64, @bitCast(x)) >> 32)));
+    }
+    if (hx >= 0x7ff00000) return x + x;
+    k += (hx >> 20) - 1023;
+    hx &= 0x000fffff;
+    var i: i32 = (hx + 0x95f64) & 0x100000;
+    // normalize x or x/2
+    const hi: u32 = @bitCast(hx | (i ^ 0x3ff00000));
+    x = @bitCast((@as(u64, hi) << 32) | (@as(u64, @bitCast(x)) & 0xffffffff));
+    k += i >> 20;
+    const f = x - 1.0;
+    const dk: f64 = @floatFromInt(k);
+    if ((0x000fffff & (2 + hx)) < 3) { // |f| < 2**-20
+        if (f == 0) {
+            if (k == 0) return 0;
+            return dk * ln2_hi + dk * ln2_lo;
+        }
+        const r = f * f * (0.5 - 0.33333333333333333 * f);
+        if (k == 0) return f - r;
+        return dk * ln2_hi - ((r - dk * ln2_lo) - f);
+    }
+    const s = f / (2.0 + f);
+    const z = s * s;
+    i = hx - 0x6147a;
+    const w = z * z;
+    const j: i32 = 0x6b851 - hx;
+    const t1 = w * (lg2 + w * (lg4 + w * lg6));
+    const t2 = z * (lg1 + w * (lg3 + w * (lg5 + w * lg7)));
+    i |= j;
+    const r = t2 + t1;
+    if (i > 0) {
+        const hfsq = 0.5 * f * f;
+        if (k == 0) return f - (hfsq - s * (hfsq + r));
+        return dk * ln2_hi - ((hfsq - (s * (hfsq + r) + dk * ln2_lo)) - f);
+    }
+    if (k == 0) return f - s * (f - r);
+    return dk * ln2_hi - ((s * (f - r) - dk * ln2_lo) - f);
+}
+
 /// js Math.max(0, v): NaN-propagating
 inline fn jsMax0(v: f64) f64 {
     if (std.math.isNan(v)) return v;
@@ -590,6 +651,47 @@ fn mouseForce(p: *Physics) void {
     }
 }
 
+/// ParticleSystem.applyWallForce: each wall pushes like the crowd's average
+/// density spread over the part of the interaction disc beyond it.
+fn wallForce(p: *Physics) void {
+    const s = p.settings;
+    const r = s.interaction_radius;
+    if (!(s.attract <= -1e-6) or r <= 0) return;
+    var total_mass: f64 = 0;
+    for (p.mass[0..p.n]) |m| total_mass += m;
+    const ctx: WallCtx = .{
+        .r = r,
+        .strength = (s.attract * p.dt * total_mass) / (s.width * s.height),
+        .min_dist = s.smoothing_factor * r,
+    };
+    for (0..p.n) |i| {
+        if (p.x[i] < r) p.vx[i] -= ctx.push(p.x[i]);
+        if (s.width - p.x[i] < r) p.vx[i] += ctx.push(s.width - p.x[i]);
+        if (p.y[i] < r) p.vy[i] -= ctx.push(p.y[i]);
+        if (s.height - p.y[i] < r) p.vy[i] += ctx.push(s.height - p.y[i]);
+    }
+}
+
+const WallCtx = struct {
+    r: f64,
+    strength: f64,
+    min_dist: f64,
+
+    fn push(c: WallCtx, d: f64) f64 {
+        const dd = jsMax(d, c.min_dist);
+        if (dd >= c.r) return 0;
+        const q = @sqrt(c.r * c.r - dd * dd);
+        return c.strength * (2 * log((c.r + q) / dd) - (2 * q) / c.r);
+    }
+};
+
+/// js Math.max(a, b): NaN-propagating, +0 over -0
+inline fn jsMax(a: f64, b: f64) f64 {
+    if (std.math.isNan(a) or std.math.isNan(b)) return std.math.nan(f64);
+    if (a == b) return if (std.math.signbit(a)) b else a;
+    return if (a > b) a else b;
+}
+
 /// Particle.update
 fn updateParticle(p: *Physics, i: usize) void {
     const s = p.settings;
@@ -695,6 +797,7 @@ pub fn step(p: *Physics, a: Allocator, delta_ms: f64) !void {
     p.dt = delta_ms / 1000.0;
     try p.updateHash(a);
     try p.pairs(a);
+    p.wallForce();
     p.mouseForce();
     const has_shapes = p.shapes.items.len > 0;
     for (0..p.n) |i| {
@@ -709,6 +812,23 @@ test "toInt32 matches js" {
     try std.testing.expectEqual(@as(i32, 0), toInt32(std.math.nan(f64)));
     try std.testing.expectEqual(@as(i32, -2147483648), toInt32(2147483648.0));
     try std.testing.expectEqual(@as(i32, 0), toInt32(4294967296.0));
+}
+
+test "log matches v8 Math.log" {
+    const cases = [_]struct { f64, u64 }{
+        .{ 1.0000001, 0x3e7ad7f2847b6492 },
+        .{ 1.5, 0x3fd9f323ecbf984c },
+        .{ 2, 0x3fe62e42fefa39ef },
+        .{ 3.732050807568877, 0x3ff5124271980434 },
+        .{ 6.51, 0x3ffdf932cb2c5fc0 },
+        .{ 10, 0x40026bb1bbb55516 },
+        .{ 123.456, 0x401343774f3e2362 },
+        .{ 1e-300, 0xc085963447f87fb5 },
+        .{ 5e-324, 0xc0874385446d71c3 },
+        .{ 0.3, 0xbff34378fcbda721 },
+        .{ 1e+300, 0x4085963447f87fb5 },
+    };
+    for (cases) |c| try std.testing.expectEqual(c[1], @as(u64, @bitCast(log(c[0]))));
 }
 
 test "hash packs like js" {

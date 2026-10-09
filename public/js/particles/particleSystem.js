@@ -391,6 +391,45 @@ export class ParticleSystem {
 		}
 	}
 
+	// With repulsion on, a particle near a wall is pushed by the crowd on one
+	// side and by nothing on the other, so the crowd squeezes a crust of
+	// particles flat against each wall. Each wall stands in for the missing
+	// neighbors: it pushes with the force of the crowd's average density spread
+	// over the part of the interaction disc that lies beyond the wall. For a
+	// half-plane at distance d that integral is
+	//   2 ln((R + q) / d) - 2q / R,  q = sqrt(R^2 - d^2)
+	// with d clamped to the smoothing distance like a pair.
+	// Mirrored in zig/src/physics.zig (wallForce).
+	applyWallForce() {
+		const settings = this._settings;
+		const r = settings.INTERACTION_RADIUS;
+		const attract = settings.ATTRACT;
+		const smoothingFactor = settings.SMOOTHING_FACTOR || 0.3;
+		if (!(attract <= -1e-6) || r <= 0) return;
+
+		const particles = this.particles;
+		const w = this.canvas.width;
+		const h = this.canvas.height;
+		let totalMass = 0;
+		for (let i = 0; i < particles.length; i++) totalMass += particles[i].mass;
+		const strength = (attract * this.deltaTime * totalMass) / (w * h);
+		const minDist = smoothingFactor * r;
+		const push = (d) => {
+			const dd = Math.max(d, minDist);
+			if (dd >= r) return 0;
+			const q = Math.sqrt(r * r - dd * dd);
+			return strength * (2 * Math.log((r + q) / dd) - (2 * q) / r);
+		};
+
+		for (let i = 0; i < particles.length; i++) {
+			const p = particles[i];
+			if (p.x < r) p.vx -= push(p.x);
+			if (w - p.x < r) p.vx += push(w - p.x);
+			if (p.y < r) p.vy -= push(p.y);
+			if (h - p.y < r) p.vy += push(h - p.y);
+		}
+	}
+
 	applyAttraction() {
 		const settings = this._settings;
 		const interactionRadius = settings.INTERACTION_RADIUS;
@@ -564,6 +603,7 @@ export class ParticleSystem {
 			this.applyAttraction();
 		}
 
+		this.applyWallForce();
 		this.applyMouseForce();
 
 		const elasticity = settings.ELASTICITY !== undefined ? settings.ELASTICITY : 0.8;
