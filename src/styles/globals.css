@@ -6,6 +6,14 @@
     html {
         @apply h-full;
     }
+    /* homepage (see app/page.tsx): pin the page to the screen so nothing scrolls */
+    html.home-locked,
+    html.home-locked body {
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+        overscroll-behavior: none;
+    }
     body {
         @apply h-full;
         font-family: var(--font-fira-code), monospace;

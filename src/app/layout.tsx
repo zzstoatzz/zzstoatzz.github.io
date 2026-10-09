@@ -1,7 +1,7 @@
 import { Fira_Code } from 'next/font/google';
 import '../styles/globals.css';
 import ConditionalLayout from './components/ConditionalLayout';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import 'highlight.js/styles/atom-one-dark.css';
 import PlyrFmPlayer from './components/PlyrFmPlayer';
@@ -21,6 +21,13 @@ export const metadata: Metadata = {
     icons: {
         icon: '/assets/images/stoat.png',
     },
+};
+
+// cover: draw under the notch, home indicator and iOS safari's bars
+export const viewport: Viewport = {
+    width: 'device-width',
+    initialScale: 1,
+    viewportFit: 'cover',
 };
 
 export default function RootLayout({
