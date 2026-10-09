@@ -17,6 +17,13 @@ for (let i = 0; i < PARTICLE_COLORS.length; i++) {
 	COLOR_INDEX.set(PARTICLE_COLORS[i], i);
 }
 
+// Flag a buffer attribute for upload, limited to its first `count` floats.
+function markRange(attr, count) {
+	attr.clearUpdateRanges();
+	attr.addUpdateRange(0, count);
+	attr.needsUpdate = true;
+}
+
 export class WebGLParticleRenderer {
 	constructor(width, height) {
 		this.width = width;
@@ -183,9 +190,11 @@ export class WebGLParticleRenderer {
 			sizeArr[i] = p.radius;
 		}
 
-		geo.getAttribute('position').needsUpdate = true;
-		geo.getAttribute('customColor').needsUpdate = true;
-		geo.getAttribute('size').needsUpdate = true;
+		// Upload only the live range. Without update ranges three.js re-sends
+		// the whole MAX_PARTICLES buffer every frame.
+		markRange(geo.getAttribute('position'), count * 3);
+		markRange(geo.getAttribute('customColor'), count * 3);
+		markRange(geo.getAttribute('size'), count);
 		geo.setDrawRange(0, count);
 	}
 
@@ -215,9 +224,9 @@ export class WebGLParticleRenderer {
 		alphaArr.set(connAlpha.subarray(0, vertCount));
 		colArr.set(connColor.subarray(0, vertCount * 3));
 
-		geo.getAttribute('position').needsUpdate = true;
-		geo.getAttribute('alpha').needsUpdate = true;
-		geo.getAttribute('endpointColor').needsUpdate = true;
+		markRange(geo.getAttribute('position'), vertCount * 3);
+		markRange(geo.getAttribute('alpha'), vertCount);
+		markRange(geo.getAttribute('endpointColor'), vertCount * 3);
 		geo.setDrawRange(0, vertCount);
 	}
 
