@@ -1,11 +1,12 @@
 // Zig/wasm physics backend. Runs the same per-frame physics as
 // ParticleSystem.updateParticles (spatial hash, pair attraction + connection
-// buffer, mouse force, particle update, shape collisions), bit-for-bit with
-// the JS path under V8. Source: zig/src/physics.zig.
+// buffer, wall push, mouse force, particle update, shape collisions),
+// bit-for-bit with the JS path under V8. Source: zig/src/physics.zig.
 //
-// Particle objects stay the source of truth for everything else (renderers,
-// settings, shape editor): each step copies state in, steps, and copies the
-// moved state back out.
+// The wasm module owns the particle state: once attached, the ParticleStore's
+// arrays are views into wasm memory, so a step is one call with no copying.
+
+import { PARTICLE_RGB } from "./config.js";
 
 // Inputs to the mouse force, derived exactly as applyMouseForce does.
 export function mouseParams(ps, now) {
@@ -69,79 +70,43 @@ export class WasmPhysics {
 
 	constructor(exports) {
 		this.w = exports;
-		this.n = -1;
-		this.buffer = null;
-		this.colorIndex = new Map(); // hex -> palette slot
 		this.w.seed((Math.random() * 2 ** 32) >>> 0);
+		this._conn = null;
 	}
 
-	_views() {
+	// Move the store's particles into wasm memory and write the palette.
+	attach(store) {
 		const w = this.w;
-		const buf = w.memory.buffer;
-		if (buf === this.buffer) return;
-		this.buffer = buf;
-		const n = Math.max(this.n, 0);
-		this.x = new Float64Array(buf, w.xPtr(), n);
-		this.y = new Float64Array(buf, w.yPtr(), n);
-		this.vx = new Float64Array(buf, w.vxPtr(), n);
-		this.vy = new Float64Array(buf, w.vyPtr(), n);
-		this.radius = new Float64Array(buf, w.radiusPtr(), n);
-		this.mass = new Float64Array(buf, w.massPtr(), n);
-		this.color = new Uint8Array(buf, w.colorPtr(), n);
-		this.palette = new Float64Array(buf, w.palettePtr(), 256 * 3);
-		this.connPos = new Float32Array(buf, w.connPosPtr(), 200000 * 2 * 3);
-		this.connAlpha = new Float32Array(buf, w.connAlphaPtr(), 200000 * 2);
-		this.connColor = new Float32Array(buf, w.connColorPtr(), 200000 * 2 * 3);
-		// palette lives in wasm memory; rewrite it after any move
-		for (const [hex, slot] of this.colorIndex) this._writePalette(hex, slot);
-	}
-
-	_writePalette(hex, slot) {
-		this.palette[slot * 3] = Number.parseInt(hex.slice(1, 3), 16) / 255;
-		this.palette[slot * 3 + 1] = Number.parseInt(hex.slice(3, 5), 16) / 255;
-		this.palette[slot * 3 + 2] = Number.parseInt(hex.slice(5, 7), 16) / 255;
-	}
-
-	_slot(hex) {
-		let slot = this.colorIndex.get(hex);
-		if (slot === undefined) {
-			slot = this.colorIndex.size & 0xff;
-			this.colorIndex.set(hex, slot);
-			this._writePalette(hex, slot);
-		}
-		return slot;
+		store.attach(w);
+		const palette = new Float64Array(w.memory.buffer, w.palettePtr(), 256 * 3);
+		PARTICLE_RGB.forEach((rgb, k) => palette.set(rgb, k * 3));
 	}
 
 	// Replay recorded Math.random() draws instead of the internal PRNG (tests).
 	useTape(values) {
 		const ptr = this.w.useTape(values.length);
 		new Float64Array(this.w.memory.buffer, ptr, values.length).set(values);
-		this.buffer = null;
 	}
 
-	// Equivalent of ps.updateParticles(deltaTime) on the given system.
+	// Connection buffer views, rebuilt if wasm memory moved.
+	_connViews() {
+		const w = this.w;
+		const buf = w.memory.buffer;
+		if (this._conn?.buffer !== buf) {
+			this._conn = {
+				buffer: buf,
+				pos: new Float32Array(buf, w.connPosPtr(), 200000 * 2 * 3),
+				alpha: new Float32Array(buf, w.connAlphaPtr(), 200000 * 2),
+				color: new Float32Array(buf, w.connColorPtr(), 200000 * 2 * 3),
+			};
+		}
+		return this._conn;
+	}
+
+	// Equivalent of ps.updateParticles(deltaTime) on the given system, whose
+	// store must be attached to this module.
 	step(ps, deltaTime, now = performance.now()) {
 		const w = this.w;
-		const particles = ps.particles;
-		const n = particles.length;
-		if (n !== this.n) {
-			if (!w.setCount(n)) throw new Error("wasm physics: out of memory");
-			this.n = n;
-			this.buffer = null;
-		}
-		this._views();
-
-		for (let i = 0; i < n; i++) {
-			const p = particles[i];
-			this.x[i] = p.x;
-			this.y[i] = p.y;
-			this.vx[i] = p.vx;
-			this.vy[i] = p.vy;
-			this.radius[i] = p.radius;
-			this.mass[i] = p.mass;
-			this.color[i] = this._slot(p.color);
-		}
-
 		const s = ps._settings;
 		w.setSettings(
 			s.INTERACTION_RADIUS,
@@ -157,7 +122,7 @@ export class WasmPhysics {
 		);
 
 		const shapes = ps.shapeField.shapes;
-		w.setShapeCount(shapes.length);
+		if (!w.setShapeCount(shapes.length)) throw new Error("wasm physics: out of memory");
 		for (let k = 0; k < shapes.length; k++) {
 			const sh = shapes[k];
 			const nm = sh.normals || [];
@@ -174,19 +139,12 @@ export class WasmPhysics {
 
 		ps.deltaTime = deltaTime / 1000.0;
 		if (!w.step(deltaTime)) throw new Error("wasm physics: step failed");
-		this._views(); // the hash may have grown memory
+		ps.store.sync();
 
-		for (let i = 0; i < n; i++) {
-			const p = particles[i];
-			p.x = this.x[i];
-			p.y = this.y[i];
-			p.vx = this.vx[i];
-			p.vy = this.vy[i];
-		}
-
-		ps._connPos = this.connPos;
-		ps._connAlpha = this.connAlpha;
-		ps._connColor = this.connColor;
+		const conn = this._connViews();
+		ps._connPos = conn.pos;
+		ps._connAlpha = conn.alpha;
+		ps._connColor = conn.color;
 		ps._connVertCount = w.connVerts();
 	}
 }

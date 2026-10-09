@@ -41,6 +41,14 @@ export const PARTICLE_COLORS = [
 	"#ffb86c", // Orange
 ];
 
+// [r, g, b] in 0..1 per PARTICLE_COLORS entry. Particles store a color as an
+// index into these.
+export const PARTICLE_RGB = PARTICLE_COLORS.map((hex) => [
+	Number.parseInt(hex.slice(1, 3), 16) / 255,
+	Number.parseInt(hex.slice(3, 5), 16) / 255,
+	Number.parseInt(hex.slice(5, 7), 16) / 255,
+]);
+
 // Particle appearance configuration
 export const MIN_PARTICLE_RADIUS = 1;
 export const MAX_PARTICLE_RADIUS = 4;

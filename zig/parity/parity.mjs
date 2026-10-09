@@ -17,7 +17,7 @@ const js = (f) => path.join(root, "public/js/particles", f);
 globalThis.window ??= globalThis;
 
 const { ParticleSystem } = await import(js("particleSystem.js"));
-const { Particle } = await import(js("particle.js"));
+const { ParticleStore } = await import(js("particleStore.js"));
 const { SpatialHash } = await import(js("spatialHash.js"));
 const { ShapeField, SHAPE_TYPES } = await import(js("shapes.js"));
 const { PARTICLE_COLORS, DEFAULT_SETTINGS } = await import(js("config.js"));
@@ -101,7 +101,8 @@ function genCase(seed) {
 	return { seed, width, height, settings, parts, shapes, mouse, dts, useWebGL };
 }
 
-function buildSystem(c, now) {
+// wasm: attach the store to this module so the particles live in its memory
+function buildSystem(c, now, wasm = null) {
 	const ps = Object.create(ParticleSystem.prototype);
 	ps.canvas = { width: c.width, height: c.height };
 	ps._settings = { ...c.settings };
@@ -109,7 +110,13 @@ function buildSystem(c, now) {
 	ps.shapeField = new ShapeField();
 	ps.shapeField.resize(c.width, c.height);
 	for (const s of c.shapes) ps.shapeField.add(s.type, s.x, s.y, s.r, null);
-	ps.particles = c.parts.map((q) => Object.assign(Object.create(Particle.prototype), q));
+	ps.store = new ParticleStore();
+	ps.store.resize(c.parts.length);
+	c.parts.forEach((q, i) => {
+		for (const f of ["x", "y", "vx", "vy", "radius", "mass"]) ps.store[f][i] = q[f];
+		ps.store.color[i] = PARTICLE_COLORS.indexOf(q.color);
+	});
+	if (wasm) wasm.attach(ps.store);
 	ps.isMouseDown = c.mouse.down;
 	ps.mouseX = c.mouse.x;
 	ps.mouseY = c.mouse.y;
@@ -124,7 +131,6 @@ function buildSystem(c, now) {
 	ps._connAlpha = new Float32Array(200000 * 2);
 	ps._connColor = new Float32Array(200000 * 2 * 3);
 	ps._connVertCount = 0;
-	ps._colorCache = new Map();
 	ps.deltaTime = 0;
 	return ps;
 }
@@ -158,7 +164,7 @@ for (let k = 0; k < cases; k++) {
 	for (const dt of c.dts) {
 		ref.updateParticles(dt);
 		snaps.push({
-			p: ref.particles.map((q) => [q.x, q.y, q.vx, q.vy]),
+			p: Array.from({ length: ref.store.count }, (_, i) => [ref.store.x[i], ref.store.y[i], ref.store.vx[i], ref.store.vy[i]]),
 			verts: ref.useWebGL ? ref._connVertCount : 0,
 			pos: ref.useWebGL ? ref._connPos.slice(0, ref._connVertCount * 3) : null,
 			alpha: ref.useWebGL ? ref._connAlpha.slice(0, ref._connVertCount) : null,
@@ -169,7 +175,7 @@ for (let k = 0; k < cases; k++) {
 	performance.now = realNow;
 
 	// --- wasm ---
-	const sys = buildSystem(c, NOW);
+	const sys = buildSystem(c, NOW, phys);
 	phys.useTape(tape.length ? tape : [0.5]);
 	let bad = null;
 	c.dts.forEach((dt, s) => {
@@ -177,9 +183,9 @@ for (let k = 0; k < cases; k++) {
 		phys.step(sys, dt, NOW);
 		stepsRun++;
 		const want = snaps[s];
-		for (let i = 0; i < sys.particles.length && !bad; i++) {
-			const q = sys.particles[i];
-			const got = [q.x, q.y, q.vx, q.vy];
+		const st = sys.store;
+		for (let i = 0; i < st.count && !bad; i++) {
+			const got = [st.x[i], st.y[i], st.vx[i], st.vy[i]];
 			for (let f = 0; f < 4; f++) {
 				if (!same(got[f], want.p[i][f])) {
 					bad = `step ${s} particle ${i} field ${["x", "y", "vx", "vy"][f]}: wasm ${got[f]} js ${want.p[i][f]}`;

@@ -131,7 +131,24 @@ const CellTable = struct {
     }
 };
 
-// particle state (soa), length n
+/// one particle. the system stores these column-wise in a MultiArrayList,
+/// which also owns the state js reads and writes (wasmPhysics.js).
+pub const Particle = struct {
+    x: f64 = 0,
+    y: f64 = 0,
+    vx: f64 = 0,
+    vy: f64 = 0,
+    radius: f64 = 0,
+    mass: f64 = 0,
+    /// Particle.sizeVariationFactor in [-1, 1]. physics never reads it; js
+    /// re-derives radius from it when the size setting changes.
+    size_var: f64 = 0,
+    /// index into PARTICLE_COLORS (and `palette`)
+    color: u8 = 0,
+};
+
+particles: std.MultiArrayList(Particle) = .empty,
+// column views of `particles`, length n, refreshed by `resize`
 n: usize = 0,
 x: []f64 = &.{},
 y: []f64 = &.{},
@@ -139,6 +156,7 @@ vx: []f64 = &.{},
 vy: []f64 = &.{},
 radius: []f64 = &.{},
 mass: []f64 = &.{},
+size_var: []f64 = &.{},
 color: []u8 = &.{},
 
 /// rgb per palette entry, as js computes them: parseInt(hex)/255
@@ -166,8 +184,7 @@ conn_verts: u32 = 0,
 dt: f64 = 0,
 
 pub fn deinit(p: *Physics, a: Allocator) void {
-    for ([_][]f64{ p.x, p.y, p.vx, p.vy, p.radius, p.mass }) |s| a.free(s);
-    a.free(p.color);
+    p.particles.deinit(a);
     a.free(p.conn_pos);
     a.free(p.conn_alpha);
     a.free(p.conn_color);
@@ -179,24 +196,30 @@ pub fn deinit(p: *Physics, a: Allocator) void {
     p.scratch.deinit(a);
 }
 
+/// resize to n particles, keeping existing ones and zeroing new ones. this is
+/// the only call that allocates: it also reserves everything `step` needs for
+/// n particles, so `step` never grows memory and column pointers stay valid
+/// until the next resize.
 pub fn resize(p: *Physics, a: Allocator, n: usize) !void {
-    if (n > p.x.len) {
-        const cap = @max(n, p.x.len * 2, 64);
-        inline for (.{ "x", "y", "vx", "vy", "radius", "mass" }) |f| {
-            const old = @field(p, f);
-            const new = try a.alloc(f64, cap);
-            @memcpy(new[0..p.n], old[0..p.n]);
-            @memset(new[p.n..], 0);
-            a.free(old);
-            @field(p, f) = new;
-        }
-        const nc = try a.alloc(u8, cap);
-        @memcpy(nc[0..p.n], p.color[0..p.n]);
-        @memset(nc[p.n..], 0);
-        a.free(p.color);
-        p.color = nc;
-    }
+    const old = p.particles.len;
+    try p.particles.resize(a, n);
+    if (n > old) for (old..n) |i| p.particles.set(i, .{});
+    const cols = p.particles.slice();
     p.n = n;
+    p.x = cols.items(.x);
+    p.y = cols.items(.y);
+    p.vx = cols.items(.vx);
+    p.vy = cols.items(.vy);
+    p.radius = cols.items(.radius);
+    p.mass = cols.items(.mass);
+    p.size_var = cols.items(.size_var);
+    p.color = cols.items(.color);
+
+    try p.lookup.reset(a, n);
+    try p.slot_of.ensureTotalCapacity(a, n);
+    try p.sorted.ensureTotalCapacity(a, n);
+    try p.cells.ensureTotalCapacity(a, n);
+    try p.scratch.fit(a, n);
 }
 
 pub fn ensureConnections(p: *Physics, a: Allocator) !void {
@@ -804,6 +827,42 @@ pub fn step(p: *Physics, a: Allocator, delta_ms: f64) !void {
         p.updateParticle(i);
         if (has_shapes) p.collide(i);
     }
+}
+
+test "step never allocates after resize" {
+    const a = std.testing.allocator;
+    var p: Physics = .{};
+    defer p.deinit(a);
+    try p.resize(a, 500);
+    try p.ensureConnections(a);
+    var prng = std.Random.DefaultPrng.init(7);
+    const r = prng.random();
+    for (0..500) |i| {
+        p.x[i] = r.float(f64) * 800;
+        p.y[i] = r.float(f64) * 600;
+        p.radius[i] = 2.5;
+        p.mass[i] = std.math.pi * 2.5 * 2.5;
+    }
+    // js reads and writes the columns through raw pointers between resizes,
+    // so a step that reallocated anything would leave js on freed memory.
+    var failing: std.testing.FailingAllocator = .init(a, .{ .fail_index = 0 });
+    for (0..50) |_| try p.step(failing.allocator(), 16.6);
+    try std.testing.expectEqual(@as(usize, 0), failing.allocations);
+}
+
+test "resize keeps particles and zeroes new ones" {
+    const a = std.testing.allocator;
+    var p: Physics = .{};
+    defer p.deinit(a);
+    try p.resize(a, 3);
+    p.x[2] = 42;
+    p.color[2] = 7;
+    try p.resize(a, 1000);
+    try std.testing.expectEqual(@as(f64, 42), p.x[2]);
+    try std.testing.expectEqual(@as(u8, 7), p.color[2]);
+    try std.testing.expectEqual(Particle{}, p.particles.get(999));
+    try p.resize(a, 2);
+    try std.testing.expectEqual(@as(usize, 2), p.x.len);
 }
 
 test "toInt32 matches js" {

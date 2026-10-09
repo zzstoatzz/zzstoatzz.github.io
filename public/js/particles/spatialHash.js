@@ -23,16 +23,17 @@ export class SpatialHash {
 		return ((cx & 0xffff) << 16) | (cy & 0xffff);
 	}
 
-	update(particles, count, cellSize) {
+	update(store, count, cellSize) {
 		this.cellSize = cellSize > 0 ? cellSize : 50;
 		this.cells.clear();
 
 		const invCellSize = 1 / this.cellSize;
+		const xs = store.x;
+		const ys = store.y;
 
 		for (let i = 0; i < count; i++) {
-			const p = particles[i];
-			const cx = (p.x * invCellSize) | 0;
-			const cy = (p.y * invCellSize) | 0;
+			const cx = (xs[i] * invCellSize) | 0;
+			const cy = (ys[i] * invCellSize) | 0;
 			const key = this._hash(cx, cy);
 
 			let cell = this.cells.get(key);
@@ -46,7 +47,7 @@ export class SpatialHash {
 
 	// Iterate every unique (i, j) pair in the same or an adjacent cell exactly
 	// once, with i < j.
-	forEachPair(particles, callback) {
+	forEachPair(callback) {
 		for (const cell of this.cells.values()) {
 			const items = cell.items;
 			const n = items.length;
@@ -81,7 +82,7 @@ export class SpatialHash {
 	}
 
 	// Iterate particle indices within radius r of (x, y).
-	*queryRadius(x, y, r, particles) {
+	*queryRadius(x, y, r, store) {
 		const invCellSize = 1 / this.cellSize;
 		const centerCX = (x * invCellSize) | 0;
 		const centerCY = (y * invCellSize) | 0;
@@ -95,9 +96,8 @@ export class SpatialHash {
 				if (!cell) continue;
 
 				for (const i of cell.items) {
-					const p = particles[i];
-					const dx = p.x - x;
-					const dy = p.y - y;
+					const dx = store.x[i] - x;
+					const dy = store.y[i] - y;
 					if (dx * dx + dy * dy < rSq) {
 						yield i;
 					}

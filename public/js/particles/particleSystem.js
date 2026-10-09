@@ -1,7 +1,8 @@
-import { Particle } from "./particle.js";
+import { spawnParticle, applyParticleSettings, updateParticle } from "./particle.js";
+import { ParticleStore } from "./particleStore.js";
 import { SettingsManager } from "./settingsManager.js";
 import { UIController } from "./uiController.js";
-import { PARTICLE_COLORS } from "./config.js";
+import { PARTICLE_COLORS, PARTICLE_RGB } from "./config.js";
 import { SpatialHash } from "./spatialHash.js";
 import { CanvasRenderer } from "./canvasRenderer.js";
 import { MouseEffects } from "./mouseEffects.js";
@@ -13,7 +14,7 @@ export class ParticleSystem {
 	constructor(canvas, overlayCanvas) {
 		this.canvas = canvas;
 		this.ctx = this.canvas.getContext("2d");
-		this.particles = [];
+		this.store = new ParticleStore();
 		this.spatialHash = new SpatialHash();
 		this.mouseX = 0;
 		this.mouseY = 0;
@@ -42,7 +43,6 @@ export class ParticleSystem {
 		this._connAlpha = new Float32Array(200000 * 2);
 		this._connColor = new Float32Array(200000 * 2 * 3);
 		this._connVertCount = 0;
-		this._colorCache = new Map(); // hex -> [r,g,b] memoization
 
 		this.PARTICLE_COLORS = PARTICLE_COLORS;
 
@@ -82,7 +82,9 @@ export class ParticleSystem {
 	async _initWasmPhysics() {
 		try {
 			if (new URLSearchParams(window.location.search).get("physics") === "js") return;
-			this.wasmPhysics = await WasmPhysics.load(new URL("./physics.wasm", import.meta.url));
+			const wasm = await WasmPhysics.load(new URL("./physics.wasm", import.meta.url));
+			wasm.attach(this.store);
+			this.wasmPhysics = wasm;
 			console.log("wasm physics initialized");
 		} catch (e) {
 			console.warn("wasm physics not available, using JS:", e);
@@ -118,15 +120,9 @@ export class ParticleSystem {
 	}
 
 	init() {
-		this.particles = [];
 		const settings = this._settings;
-		const count = settings.PARTICLE_COUNT;
-
-		for (let i = 0; i < count; i++) {
-			const x = Math.random() * this.canvas.width;
-			const y = Math.random() * this.canvas.height;
-			this.particles.push(new Particle(x, y, settings));
-		}
+		this.store.resize(0);
+		this.spawnParticles(settings.PARTICLE_COUNT, settings);
 
 		this.bindSystemEvents();
 		this.resizeCanvas();
@@ -307,21 +303,24 @@ export class ParticleSystem {
 			this.shapeField.deserialize(serialized);
 		}
 
-		for (const particle of this.particles) {
-			particle.updateSettings(settings);
-		}
+		const s = this.store;
+		for (let i = 0; i < s.count; i++) applyParticleSettings(s, i, settings);
+		s.version++;
 
-		const currentCount = this.particles.length;
 		const targetCount = settings.PARTICLE_COUNT;
+		if (targetCount > s.count) this.spawnParticles(targetCount - s.count, settings);
+		else if (targetCount < s.count) s.resize(targetCount);
+	}
 
-		if (targetCount > currentCount) {
-			for (let i = currentCount; i < targetCount; i++) {
-				const x = Math.random() * this.canvas.width;
-				const y = Math.random() * this.canvas.height;
-				this.particles.push(new Particle(x, y, settings));
-			}
-		} else if (targetCount < currentCount) {
-			this.particles = this.particles.slice(0, targetCount);
+	// Append n particles at random positions.
+	spawnParticles(n, settings) {
+		const s = this.store;
+		const start = s.count;
+		s.resize(start + n);
+		for (let i = start; i < start + n; i++) {
+			const x = Math.random() * this.canvas.width;
+			const y = Math.random() * this.canvas.height;
+			spawnParticle(s, i, x, y, settings);
 		}
 	}
 
@@ -355,10 +354,10 @@ export class ParticleSystem {
 
 		const radiusSq = radius * radius;
 
-		for (const i of this.spatialHash.queryRadius(this.mouseX, this.mouseY, radius, this.particles)) {
-			const particle = this.particles[i];
-			const dx = particle.x - this.mouseX;
-			const dy = particle.y - this.mouseY;
+		const s = this.store;
+		for (const i of this.spatialHash.queryRadius(this.mouseX, this.mouseY, radius, s)) {
+			const dx = s.x[i] - this.mouseX;
+			const dy = s.y[i] - this.mouseY;
 			const distSq = dx * dx + dy * dy;
 
 			if (distSq < radiusSq && distSq > 1e-6) {
@@ -368,12 +367,12 @@ export class ParticleSystem {
 				const dirY = dy / distance;
 
 				if (!settings.ENABLE_VORTEX_FORCE) {
-					particle.vx += dirX * strength;
-					particle.vy += dirY * strength;
+					s.vx[i] += dirX * strength;
+					s.vy[i] += dirY * strength;
 				} else {
 					const radialForce = strength * (this.isMouseDown ? 0.3 : 1.0);
-					particle.vx += dirX * radialForce;
-					particle.vy += dirY * radialForce;
+					s.vx[i] += dirX * radialForce;
+					s.vy[i] += dirY * radialForce;
 
 					if (this.isMouseDown && this.mouseEffects.holdStartTime) {
 						const holdDuration = (performance.now() - this.mouseEffects.holdStartTime) / 1000;
@@ -383,8 +382,8 @@ export class ParticleSystem {
 
 						const tangentX = -dirY;
 						const tangentY = dirX;
-						particle.vx += tangentX * vortexStrength;
-						particle.vy += tangentY * vortexStrength;
+						s.vx[i] += tangentX * vortexStrength;
+						s.vy[i] += tangentY * vortexStrength;
 					}
 				}
 			}
@@ -407,11 +406,12 @@ export class ParticleSystem {
 		const smoothingFactor = settings.SMOOTHING_FACTOR || 0.3;
 		if (!(attract <= -1e-6) || r <= 0) return;
 
-		const particles = this.particles;
+		const s = this.store;
+		const n = s.count;
 		const w = this.canvas.width;
 		const h = this.canvas.height;
 		let totalMass = 0;
-		for (let i = 0; i < particles.length; i++) totalMass += particles[i].mass;
+		for (let i = 0; i < n; i++) totalMass += s.mass[i];
 		const strength = (attract * this.deltaTime * totalMass) / (w * h);
 		const minDist = smoothingFactor * r;
 		const push = (d) => {
@@ -421,12 +421,13 @@ export class ParticleSystem {
 			return strength * (2 * Math.log((r + q) / dd) - (2 * q) / r);
 		};
 
-		for (let i = 0; i < particles.length; i++) {
-			const p = particles[i];
-			if (p.x < r) p.vx -= push(p.x);
-			if (w - p.x < r) p.vx += push(w - p.x);
-			if (p.y < r) p.vy -= push(p.y);
-			if (h - p.y < r) p.vy += push(h - p.y);
+		for (let i = 0; i < n; i++) {
+			const x = s.x[i];
+			const y = s.y[i];
+			if (x < r) s.vx[i] -= push(x);
+			if (w - x < r) s.vx[i] += push(w - x);
+			if (y < r) s.vy[i] -= push(y);
+			if (h - y < r) s.vy[i] += push(h - y);
 		}
 	}
 
@@ -440,14 +441,11 @@ export class ParticleSystem {
 
 		const interactionRadiusSq = interactionRadius * interactionRadius;
 		const forceScale = attract * this.deltaTime;
-		const particles = this.particles;
+		const { x, y, vx, vy, mass } = this.store;
 
-		this.spatialHash.forEachPair(particles, (i, j) => {
-			const p1 = particles[i];
-			const p2 = particles[j];
-
-			const dx = p2.x - p1.x;
-			const dy = p2.y - p1.y;
+		this.spatialHash.forEachPair((i, j) => {
+			const dx = x[j] - x[i];
+			const dy = y[j] - y[i];
 			const distSq = dx * dx + dy * dy;
 
 			if (distSq >= interactionRadiusSq || distSq < 1e-6) return;
@@ -456,17 +454,17 @@ export class ParticleSystem {
 			const smoothedDistance = Math.max(distance, smoothingFactor * interactionRadius);
 			if (smoothedDistance < 1e-6) return;
 
-			const forceMagnitude = (forceScale * (p1.mass * p2.mass)) / (smoothedDistance * smoothedDistance);
+			const forceMagnitude = (forceScale * (mass[i] * mass[j])) / (smoothedDistance * smoothedDistance);
 			const G = forceMagnitude / distance;
 			const forceX = G * dx;
 			const forceY = G * dy;
 
 			if (Number.isNaN(forceX) || Number.isNaN(forceY)) return;
 
-			p1.vx += forceX / p1.mass;
-			p1.vy += forceY / p1.mass;
-			p2.vx += -forceX / p2.mass;
-			p2.vy += -forceY / p2.mass;
+			vx[i] += forceX / mass[i];
+			vy[i] += forceY / mass[i];
+			vx[j] += -forceX / mass[j];
+			vy[j] += -forceY / mass[j];
 		});
 	}
 
@@ -489,20 +487,16 @@ export class ParticleSystem {
 
 		const interactionRadiusSq = interactionRadius * interactionRadius;
 		const forceScale = attract * this.deltaTime;
-		const particles = this.particles;
+		const { x, y, vx, vy, mass, color } = this.store;
 		const posArr = this._connPos;
 		const alphaArr = this._connAlpha;
 		const colArr = this._connColor;
-		const colorCache = this._colorCache;
 		let vi = 0;
 		const maxVerts = 200000 * 2;
 
-		this.spatialHash.forEachPair(particles, (i, j) => {
-			const p1 = particles[i];
-			const p2 = particles[j];
-
-			const dx = p2.x - p1.x;
-			const dy = p2.y - p1.y;
+		this.spatialHash.forEachPair((i, j) => {
+			const dx = x[j] - x[i];
+			const dy = y[j] - y[i];
 			const distSq = dx * dx + dy * dy;
 
 			if (distSq >= interactionRadiusSq || distSq < 1e-6) return;
@@ -512,16 +506,16 @@ export class ParticleSystem {
 			if (hasAttraction) {
 				const smoothedDistance = Math.max(distance, smoothingFactor * interactionRadius);
 				if (smoothedDistance >= 1e-6) {
-					const forceMagnitude = (forceScale * (p1.mass * p2.mass)) / (smoothedDistance * smoothedDistance);
+					const forceMagnitude = (forceScale * (mass[i] * mass[j])) / (smoothedDistance * smoothedDistance);
 					const G = forceMagnitude / distance;
 					const forceX = G * dx;
 					const forceY = G * dy;
 
 					if (!Number.isNaN(forceX) && !Number.isNaN(forceY)) {
-						p1.vx += forceX / p1.mass;
-						p1.vy += forceY / p1.mass;
-						p2.vx += -forceX / p2.mass;
-						p2.vy += -forceY / p2.mass;
+						vx[i] += forceX / mass[i];
+						vy[i] += forceY / mass[i];
+						vx[j] += -forceX / mass[j];
+						vy[j] += -forceY / mass[j];
 					}
 				}
 			}
@@ -530,33 +524,17 @@ export class ParticleSystem {
 				const a = connectionOpacity * (1 - distance / interactionRadius);
 				if (a > 0.001) {
 					const base = vi * 3;
-					posArr[base] = p1.x;
-					posArr[base + 1] = p1.y;
+					posArr[base] = x[i];
+					posArr[base + 1] = y[i];
 					posArr[base + 2] = 0;
-					posArr[base + 3] = p2.x;
-					posArr[base + 4] = p2.y;
+					posArr[base + 3] = x[j];
+					posArr[base + 4] = y[j];
 					posArr[base + 5] = 0;
 					alphaArr[vi] = a;
 					alphaArr[vi + 1] = a;
 
-					let c1 = colorCache.get(p1.color);
-					if (!c1) {
-						c1 = [
-							parseInt(p1.color.slice(1, 3), 16) / 255,
-							parseInt(p1.color.slice(3, 5), 16) / 255,
-							parseInt(p1.color.slice(5, 7), 16) / 255,
-						];
-						colorCache.set(p1.color, c1);
-					}
-					let c2 = colorCache.get(p2.color);
-					if (!c2) {
-						c2 = [
-							parseInt(p2.color.slice(1, 3), 16) / 255,
-							parseInt(p2.color.slice(3, 5), 16) / 255,
-							parseInt(p2.color.slice(5, 7), 16) / 255,
-						];
-						colorCache.set(p2.color, c2);
-					}
+					const c1 = PARTICLE_RGB[color[i]];
+					const c2 = PARTICLE_RGB[color[j]];
 					colArr[base] = c1[0];
 					colArr[base + 1] = c1[1];
 					colArr[base + 2] = c1[2];
@@ -578,22 +556,25 @@ export class ParticleSystem {
 		const settings = this._settings;
 		const cellSize = settings.INTERACTION_RADIUS > 0 ? settings.INTERACTION_RADIUS : 50;
 
+		const s = this.store;
+
 		if (this.wasmPhysics) {
 			// Canvas 2D still draws connections from the JS hash.
-			if (!this.useWebGL) this.spatialHash.update(this.particles, this.particles.length, cellSize);
+			if (!this.useWebGL) this.spatialHash.update(s, s.count, cellSize);
 			try {
 				this.wasmPhysics.step(this, deltaTime);
 				return;
 			} catch (e) {
 				console.warn("wasm physics failed, falling back to JS:", e);
 				this.wasmPhysics = null;
+				s.detach();
 				this._connPos = new Float32Array(200000 * 2 * 3);
 				this._connAlpha = new Float32Array(200000 * 2);
 				this._connColor = new Float32Array(200000 * 2 * 3);
 			}
 		}
 
-		this.spatialHash.update(this.particles, this.particles.length, cellSize);
+		this.spatialHash.update(s, s.count, cellSize);
 
 		if (this.useWebGL) {
 			// Combined pass: attraction + connection buffer in one pair iteration
@@ -609,9 +590,9 @@ export class ParticleSystem {
 		const elasticity = settings.ELASTICITY !== undefined ? settings.ELASTICITY : 0.8;
 		const hasShapes = this.shapeField.count > 0;
 
-		for (const particle of this.particles) {
-			particle.update(this.deltaTime, this.canvas.width, this.canvas.height, settings);
-			if (hasShapes) this.shapeField.collide(particle, elasticity);
+		for (let i = 0; i < s.count; i++) {
+			updateParticle(s, i, this.deltaTime, this.canvas.width, this.canvas.height, settings);
+			if (hasShapes) this.shapeField.collide(s, i, elasticity);
 		}
 	}
 
@@ -638,7 +619,7 @@ export class ParticleSystem {
 			}
 
 			// Upload particle data and pre-built connections to GPU, then render
-			this.webglRenderer.updateParticles(this.particles, this.particles.length);
+			this.webglRenderer.updateParticles(this.store, this.store.count);
 			this.webglRenderer.uploadConnections(
 				this._connPos, this._connAlpha, this._connColor, this._connVertCount, this._settings,
 			);
@@ -658,13 +639,13 @@ export class ParticleSystem {
 				this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
 			}
 
-			this.canvasRenderer.drawConnections(this.particles, this.spatialHash, this._settings);
+			this.canvasRenderer.drawConnections(this.store, this.spatialHash, this._settings);
 
 			this.mouseEffects.updateAndDraw(
 				timestamp, this.mouseX, this.mouseY, this.isMouseDown, this._settings,
 			);
 
-			this.canvasRenderer.drawParticles(this.particles, this.particles.length);
+			this.canvasRenderer.drawParticles(this.store, this.store.count);
 
 			// Shapes on the overlay so they occlude particles drawn beneath them.
 			this.shapeField.draw(this.overlayCtx, this.shapeEditor.preview, this.shapeEditor.selected);

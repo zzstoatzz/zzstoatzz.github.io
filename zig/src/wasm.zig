@@ -6,7 +6,8 @@ const gpa = std.heap.wasm_allocator;
 var p: Physics = .{};
 var tape: []f64 = &.{};
 
-/// resize to n particles; returns false on oom. pointers below may move after this.
+/// resize to n particles, keeping existing ones; returns false on oom. the
+/// column pointers below move only here: `step` never grows memory.
 export fn setCount(n: u32) bool {
     p.resize(gpa, n) catch return false;
     p.ensureConnections(gpa) catch return false;
@@ -30,6 +31,9 @@ export fn radiusPtr() [*]f64 {
 }
 export fn massPtr() [*]f64 {
     return p.mass.ptr;
+}
+export fn sizeVarPtr() [*]f64 {
+    return p.size_var.ptr;
 }
 export fn colorPtr() [*]u8 {
     return p.color.ptr;

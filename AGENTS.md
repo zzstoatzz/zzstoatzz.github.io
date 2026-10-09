@@ -33,7 +33,9 @@ public/js/particles/
 ```
 
 ### Zig physics (`zig/`)
-The per-frame physics (`updateParticles`: spatial hash, pair attraction + connection buffer, mouse force, particle update, shape collisions) runs in `zig/src/physics.zig`, compiled to `public/js/particles/physics.wasm`. The JS path is kept as the reference and as the fallback (`?physics=js` forces it).
+The per-frame physics (`updateParticles`: spatial hash, pair attraction + connection buffer, wall push, mouse force, particle update, shape collisions) runs in `zig/src/physics.zig`, compiled to `public/js/particles/physics.wasm`. The JS path is kept as the reference and as the fallback (`?physics=js` forces it).
+
+Particle state lives in a `ParticleStore` (`particleStore.js`): one typed array per field, indexed by particle. Once wasm loads, the store's arrays are views into wasm memory, where zig keeps the particles in a `std.MultiArrayList`, so physics, renderers and settings share that memory with no per-frame copy. `ParticleStore.resize` (zig `resize`) is the only call that moves the columns; `step` never allocates (a zig test enforces this), so views stay valid between resizes. Colors are indices into `PARTICLE_COLORS`.
 
 - `cd zig && zig build wasm` rebuilds the wasm (zig 0.16); commit the result
 - `node zig/parity/parity.mjs 500 1` property-tests the wasm against the real JS modules in V8, bit for bit (positions, velocities, connection buffers)

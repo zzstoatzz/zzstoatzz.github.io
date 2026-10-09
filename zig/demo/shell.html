@@ -45,11 +45,11 @@ setInterval(() => { document.getElementById("ms").textContent = avg.toFixed(2); 
 const btn = document.getElementById("eng");
 btn.addEventListener("click", () => {
   if (ps.wasmPhysics) {
-    wasm = ps.wasmPhysics; ps.wasmPhysics = null;
+    wasm = ps.wasmPhysics; ps.wasmPhysics = null; ps.store.detach();
     ps._connPos = new Float32Array(200000 * 6); ps._connAlpha = new Float32Array(400000); ps._connColor = new Float32Array(200000 * 6);
     btn.dataset.engine = "js"; btn.textContent = "plain js";
   } else if (wasm) {
-    ps.wasmPhysics = wasm; btn.dataset.engine = "wasm"; btn.textContent = "zig/wasm";
+    wasm.attach(ps.store); ps.wasmPhysics = wasm; btn.dataset.engine = "wasm"; btn.textContent = "zig/wasm";
   }
   avg = 0;
 });

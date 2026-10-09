@@ -1,21 +1,8 @@
 import * as THREE from 'three';
-import { PARTICLE_COLORS } from './config.js';
+import { PARTICLE_RGB } from './config.js';
 
 const MAX_PARTICLES = 50000;
 const MAX_CONNECTIONS = 200000;
-
-// Pre-compute RGB for each particle color
-const COLOR_RGB = PARTICLE_COLORS.map(hex => [
-	parseInt(hex.slice(1, 3), 16) / 255,
-	parseInt(hex.slice(3, 5), 16) / 255,
-	parseInt(hex.slice(5, 7), 16) / 255,
-]);
-
-// Fast hex -> index lookup
-const COLOR_INDEX = new Map();
-for (let i = 0; i < PARTICLE_COLORS.length; i++) {
-	COLOR_INDEX.set(PARTICLE_COLORS[i], i);
-}
 
 // Flag a buffer attribute for upload, limited to its first `count` floats.
 function markRange(attr, count) {
@@ -162,39 +149,29 @@ export class WebGLParticleRenderer {
 		this.scene.add(this.connectionsMesh);
 	}
 
-	updateParticles(particles, count) {
+	updateParticles(s, count) {
 		const geo = this.particlesMesh.geometry;
 		const posArr = geo.getAttribute('position').array;
-		const colArr = geo.getAttribute('customColor').array;
-		const sizeArr = geo.getAttribute('size').array;
-
+		const xs = s.x;
+		const ys = s.y;
 		for (let i = 0; i < count; i++) {
-			const p = particles[i];
-			const i3 = i * 3;
-			posArr[i3] = p.x;
-			posArr[i3 + 1] = p.y;
-			posArr[i3 + 2] = 0;
-
-			const ci = COLOR_INDEX.get(p.color);
-			if (ci !== undefined) {
-				const rgb = COLOR_RGB[ci];
-				colArr[i3] = rgb[0];
-				colArr[i3 + 1] = rgb[1];
-				colArr[i3 + 2] = rgb[2];
-			} else {
-				colArr[i3] = parseInt(p.color.slice(1, 3), 16) / 255;
-				colArr[i3 + 1] = parseInt(p.color.slice(3, 5), 16) / 255;
-				colArr[i3 + 2] = parseInt(p.color.slice(5, 7), 16) / 255;
-			}
-
-			sizeArr[i] = p.radius;
+			posArr[i * 3] = xs[i];
+			posArr[i * 3 + 1] = ys[i];
 		}
-
 		// Upload only the live range. Without update ranges three.js re-sends
 		// the whole MAX_PARTICLES buffer every frame.
 		markRange(geo.getAttribute('position'), count * 3);
-		markRange(geo.getAttribute('customColor'), count * 3);
-		markRange(geo.getAttribute('size'), count);
+
+		// Color and size change only on spawn or a settings change.
+		if (s.version !== this._storeVersion) {
+			this._storeVersion = s.version;
+			const colArr = geo.getAttribute('customColor').array;
+			const color = s.color;
+			for (let i = 0; i < count; i++) colArr.set(PARTICLE_RGB[color[i]], i * 3);
+			geo.getAttribute('size').array.set(s.radius.subarray(0, count));
+			markRange(geo.getAttribute('customColor'), count * 3);
+			markRange(geo.getAttribute('size'), count);
+		}
 		geo.setDrawRange(0, count);
 	}
 
