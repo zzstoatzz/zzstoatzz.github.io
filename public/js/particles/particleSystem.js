@@ -408,6 +408,8 @@ export class ParticleSystem {
 		}
 
 		const radiusSq = radius * radius;
+		// force is a kick per 60fps frame; scale it so 120Hz screens get the same push
+		const frames = this.deltaTime * 60;
 
 		const s = this.store;
 		for (const i of this.spatialHash.queryRadius(this.mouseX, this.mouseY, radius, s)) {
@@ -417,7 +419,7 @@ export class ParticleSystem {
 
 			if (distSq < radiusSq && distSq > 1e-6) {
 				const distance = Math.sqrt(distSq);
-				const strength = force * (1 - distance / radius);
+				const strength = force * (1 - distance / radius) * frames;
 				const dirX = dx / distance;
 				const dirY = dy / distance;
 

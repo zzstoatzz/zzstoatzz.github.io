@@ -57,7 +57,7 @@ function genCase(seed) {
 		DRAG: oneOf([0.05, 0, 0.2, pick(0, 0.2)]),
 		ELASTICITY: oneOf([0.8, 0.1, 1, pick(0.1, 1)]),
 		EXPLOSION_RADIUS: pick(50, 500),
-		EXPLOSION_FORCE: oneOf([1, 0, 30, pick(0, 30)]),
+		EXPLOSION_FORCE: oneOf([0.5, 0, 7.5, pick(0, 7.5)]),
 		ENABLE_VORTEX_FORCE: r() < 0.5,
 	};
 	const n = oneOf([1, 2, 50, Math.floor(pick(1, 1500))]);

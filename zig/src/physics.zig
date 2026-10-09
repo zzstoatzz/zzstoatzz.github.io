@@ -637,6 +637,7 @@ fn mouseForce(p: *Physics) void {
     const ccy: i64 = toInt32(m.y * inv);
     const reach: i64 = @intFromFloat(@ceil(m.radius / p.cell_size));
     const r2 = m.radius * m.radius;
+    const frames = p.dt * 60;
     var nx = ccx - reach;
     while (nx <= ccx + reach) : (nx += 1) {
         var ny = ccy - reach;
@@ -653,7 +654,7 @@ fn mouseForce(p: *Physics) void {
                 const d2 = dx * dx + dy * dy;
                 if (!(d2 < r2 and d2 > 1e-6)) continue;
                 const dist = @sqrt(d2);
-                const strength = m.force * (1 - dist / m.radius);
+                const strength = m.force * (1 - dist / m.radius) * frames;
                 const dir_x = dx / dist;
                 const dir_y = dy / dist;
                 if (!m.vortex) {
