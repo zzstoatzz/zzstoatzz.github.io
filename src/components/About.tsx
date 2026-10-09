@@ -12,7 +12,7 @@ interface Status {
 interface LastPlay {
     trackName: string;
     artists?: { artistName: string }[];
-    originUrl?: string;
+    originUri?: string;
 }
 
 function listRecords(collection: string, signal: AbortSignal) {
@@ -24,6 +24,12 @@ function listRecords(collection: string, signal: AbortSignal) {
         return res.json();
     });
 }
+
+// two lines on wide screens, one item per line on phones; never breaks inside an item
+const TAGLINE = [
+    ['software engineer', 'ChE from Michigan'],
+    ['grew up in the U.P.', 'now in Logan Square, Chicago'],
+];
 
 // find-bufo resolves a custom-emoji name to its real asset; one url, no client-side walk.
 const bufoUrl = (name: string) => `https://find-bufo.com/e/${name}.png`;
@@ -74,12 +80,30 @@ export default function About() {
         ? status.emoji.slice(7)
         : null;
 
+    const lastHeard = lastPlay && (
+        <>
+            <span>{lastPlay.trackName}</span>
+            {lastPlay.artists?.[0]?.artistName && (
+                <span className="about-now-artist">— {lastPlay.artists[0].artistName}</span>
+            )}
+        </>
+    );
+
     return (
         <main className="about">
             <header className="about-head">
                 <h1 className="about-name">nate</h1>
                 <p className="about-tagline">
-                    software engineer · ChE from Michigan · grew up in the U.P. · now in Logan Square, Chicago
+                    {TAGLINE.map((line) => (
+                        <span key={line[0]} className="about-tagline-line">
+                            {line.map((item, i) => (
+                                <span key={item}>
+                                    {i > 0 && <span className="about-tagline-sep"> · </span>}
+                                    <span className="about-tagline-item">{item}</span>
+                                </span>
+                            ))}
+                        </span>
+                    ))}
                 </p>
             </header>
 
@@ -119,19 +143,20 @@ export default function About() {
                 <div className="about-now-row">
                     <span className="about-now-label">last heard</span>
                     {lastPlay ? (
-                        <a
-                            href={lastPlay.originUrl || '#'}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="about-now-value"
-                        >
-                            <span>{lastPlay.trackName}</span>
-                            {lastPlay.artists?.[0]?.artistName && (
-                                <span className="about-now-artist">
-                                    — {lastPlay.artists[0].artistName}
-                                </span>
-                            )}
-                        </a>
+                        lastPlay.originUri ? (
+                            <a
+                                href={lastPlay.originUri}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="about-now-value"
+                            >
+                                {lastHeard}
+                            </a>
+                        ) : (
+                            <span className="about-now-value">
+                                {lastHeard}
+                            </span>
+                        )
                     ) : (
                         <span className="about-now-value about-now-value--muted">quiet for now</span>
                     )}

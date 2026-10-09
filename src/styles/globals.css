@@ -167,10 +167,24 @@
     }
 
     .about-tagline {
-        max-width: 44ch;
         color: #8b919a;
         font-size: 0.8125rem;
         line-height: 1.6;
+    }
+
+    .about-tagline-line {
+        display: block;
+        white-space: nowrap;
+    }
+
+    @media (max-width: 34rem) {
+        .about-tagline-item {
+            display: block;
+        }
+
+        .about-tagline-sep {
+            display: none;
+        }
     }
 
     .about-prose {
