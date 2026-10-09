@@ -9,6 +9,7 @@ import { BackgroundProvider } from './contexts/BackgroundContext';
 import BackgroundSwitcher from './components/BackgroundSwitcher';
 import Background from './components/Background';
 import NavigationMenu from './components/NavigationMenu';
+import ServiceWorker from './components/ServiceWorker';
 
 const firaCode = Fira_Code({
     subsets: ['latin'],
@@ -18,6 +19,7 @@ const firaCode = Fira_Code({
 
 export const metadata: Metadata = {
     title: 'n8',
+    applicationName: 'n8',
     icons: {
         icon: '/assets/images/stoat.png',
         apple: '/assets/images/stoat-180.png',
@@ -77,6 +79,7 @@ export default function RootLayout({
                         </ConditionalLayout>
                     </div>
                     <PlyrFmPlayer />
+                    <ServiceWorker />
                 </BackgroundProvider>
             </body>
         </html>
