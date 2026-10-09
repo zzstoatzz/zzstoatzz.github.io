@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { MailIcon, GithubIcon, BlueskyIcon, TANGLED_DOLLY } from './icons';
+import { playHref, type TealPlay } from '../utils/teal';
 
 const PDS = 'https://pds.zzstoatzz.io';
 const DID = 'did:plc:xbtmt2zjwlrfegqvch7fboei';
@@ -7,12 +8,6 @@ const DID = 'did:plc:xbtmt2zjwlrfegqvch7fboei';
 interface Status {
     text?: string;
     emoji?: string;
-}
-
-interface LastPlay {
-    trackName: string;
-    artists?: { artistName: string }[];
-    originUri?: string;
 }
 
 function listRecords(collection: string, signal: AbortSignal) {
@@ -36,7 +31,7 @@ const bufoUrl = (name: string) => `https://find-bufo.com/e/${name}.png`;
 
 export default function About() {
     const [status, setStatus] = useState<Status | null>(null);
-    const [lastPlay, setLastPlay] = useState<LastPlay | null>(null);
+    const [lastPlay, setLastPlay] = useState<TealPlay | null>(null);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -56,7 +51,7 @@ export default function About() {
 
         listRecords('fm.teal.feed.play', controller.signal)
             .then((data) => {
-                const record = data.records?.[0]?.value as LastPlay | undefined;
+                const record = data.records?.[0]?.value as TealPlay | undefined;
                 if (!cancelled && record?.trackName) setLastPlay(record);
             })
             .catch(() => {});
@@ -80,6 +75,7 @@ export default function About() {
         ? status.emoji.slice(7)
         : null;
 
+    const lastHref = lastPlay ? playHref(lastPlay) : undefined;
     const lastHeard = lastPlay && (
         <>
             <span>{lastPlay.trackName}</span>
@@ -147,9 +143,9 @@ export default function About() {
                 <div className="about-now-row">
                     <span className="about-now-label">last heard</span>
                     {lastPlay ? (
-                        lastPlay.originUri ? (
+                        lastHref ? (
                             <a
-                                href={lastPlay.originUri}
+                                href={lastHref}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="about-now-value"

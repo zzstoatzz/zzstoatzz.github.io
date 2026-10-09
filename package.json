@@ -7,7 +7,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check",
-    "lint": "astro check && eslint src"
+    "lint": "astro check && eslint src",
+    "test": "bun test"
   },
   "dependencies": {
     "@astrojs/react": "7.0.0",

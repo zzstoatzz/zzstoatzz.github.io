@@ -1,18 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { navigate } from 'astro:transitions/client';
 import { usePathname } from './pathname';
+import { plyrEmbedUrl, type TealPlay } from '../utils/teal';
 
 interface StatusData {
     text?: string;
     emoji?: string;
-}
-
-interface PlayRecord {
-    trackName: string;
-    artists: { artistName: string }[];
-    originUrl: string;
-    playedTime: string;
-    thumbnailUrl?: string;
 }
 
 interface NavItem {
@@ -32,7 +25,7 @@ export default function NavigationMenu() {
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [mounted, setMounted] = useState(false);
     const [statusData, setStatusData] = useState<StatusData | null>(null);
-    const [lastPlay, setLastPlay] = useState<PlayRecord | null>(null);
+    const [lastPlay, setLastPlay] = useState<TealPlay | null>(null);
     const pathname = usePathname();
 
     const handleToggle = useCallback(() => {
@@ -109,9 +102,7 @@ export default function NavigationMenu() {
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
                 if (!cancelled && data.records?.[0]?.value) {
-                    const play = data.records[0].value as PlayRecord;
-
-                    setLastPlay(play);
+                    setLastPlay(data.records[0].value as TealPlay);
                 }
             } catch {
                 if (!cancelled) setLastPlay(null);
@@ -176,6 +167,8 @@ export default function NavigationMenu() {
     }, [isOpen, selectedIndex, handleToggle, handleClose, handleNavigate]);
 
     if (!mounted) return null;
+
+    const lastEmbedUrl = lastPlay ? plyrEmbedUrl(lastPlay) : undefined;
 
     return (
         <>
@@ -289,11 +282,11 @@ export default function NavigationMenu() {
                                             )}
                                         </a>
                                     )}
-                                    {lastPlay && lastPlay.originUrl?.includes('plyr.fm') && (
+                                    {lastEmbedUrl && (
                                         <div className="mt-2">
                                             <span className="text-gray-500 text-sm block mb-1">last listened:</span>
                                             <iframe
-                                                src={lastPlay.originUrl.replace('/track/', '/embed/track/')}
+                                                src={lastEmbedUrl}
                                                 title="last listened track"
                                                 width="100%"
                                                 height="120"
