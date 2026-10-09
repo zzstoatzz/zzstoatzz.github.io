@@ -112,7 +112,11 @@ export default function About() {
                     Hello! My name is Nate - software engineer and ChE grad from the University of Michigan. I grew up in the Upper Peninsula of Michigan and currently live in Logan Square, Chicago.
                 </p>
                 <p>
-                    I am a physicist at heart and love graph theory. I also love listening to and playing music.
+                    I am a physicist at heart and love graph theory. I also love listening to and playing music, and hacking on{' '}
+                    <a href="https://waow.tech/go" target="_blank" rel="noopener noreferrer">
+                        waow.tech/go
+                    </a>
+                    .
                 </p>
                 <p>
                     Feel free to get in touch if you have an idea for a project or just want to chat!
