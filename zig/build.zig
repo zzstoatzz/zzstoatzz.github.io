@@ -15,7 +15,12 @@ pub fn build(b: *std.Build) void {
         .name = "physics",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/wasm.zig"),
-            .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding }),
+            .target = b.resolveTargetQuery(.{
+                .cpu_arch = .wasm32,
+                .os_tag = .freestanding,
+                // simd128 is in every current browser (safari 16.4+)
+                .cpu_features_add = std.Target.wasm.featureSet(&.{.simd128}),
+            }),
             .optimize = .ReleaseFast,
             .strip = true,
         }),

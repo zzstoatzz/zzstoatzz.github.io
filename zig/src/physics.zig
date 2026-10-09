@@ -360,6 +360,115 @@ inline fn orderedPair(p: *Physics, ctx: *const PairCtx, a: u32, b: u32) void {
     if (p.scratch.idx[a] < p.scratch.idx[b]) p.pair(ctx, a, b) else p.pair(ctx, b, a);
 }
 
+const lanes = 4;
+const V = @Vector(lanes, f64);
+
+/// orderedPair(a, b) for b in [lo, hi), in order, `lanes` candidates at a
+/// time. the pair math (sqrt, the divisions) runs as simd; the results are
+/// then applied lane by lane in js order, so the output is bit-identical:
+///   - (-dx)^2 == dx^2 and g*(-dx) == -(g*dx) exactly, so a swapped pair
+///     (js passes min index first) yields the same velocity deltas
+///   - every lane's deltas depend only on positions and masses, which pairs
+///     never change, so computing them ahead of applying them is safe
+///   - the adds into particle a happen in the same sequence as in js
+inline fn sweep(p: *Physics, ctx: *const PairCtx, a: u32, lo: u32, hi: u32) void {
+    const g = &p.scratch;
+    const ax: V = @splat(g.x[a]);
+    const ay: V = @splat(g.y[a]);
+    const ma: V = @splat(g.mass[a]);
+    const r2: V = @splat(ctx.r2);
+    const eps: V = @splat(1e-6);
+    const min_dist: V = @splat(ctx.min_dist);
+    const force_scale: V = @splat(ctx.force_scale);
+    const opacity: V = @splat(ctx.opacity);
+    const rv: V = @splat(ctx.r);
+    const one: V = @splat(1);
+    const zero: V = @splat(0);
+    var b = lo;
+    while (b + lanes <= hi) : (b += lanes) {
+        const bx: V = g.x[b..][0..lanes].*;
+        const by: V = g.y[b..][0..lanes].*;
+        const dx = bx - ax;
+        const dy = by - ay;
+        const d2 = dx * dx + dy * dy;
+        const in_range = d2 < r2;
+        if (!@reduce(.Or, in_range)) continue;
+        const not_tiny = d2 >= eps;
+        const dist = @sqrt(d2);
+
+        var tax: V = zero;
+        var tay: V = zero;
+        var tbx: V = zero;
+        var tby: V = zero;
+        var att_ok: @Vector(lanes, bool) = @splat(false);
+        if (ctx.has_attraction) {
+            const mb: V = g.mass[b..][0..lanes].*;
+            const sd = @select(f64, dist > min_dist, dist, min_dist);
+            const fm = (force_scale * (ma * mb)) / (sd * sd);
+            const gg = fm / dist;
+            const fx = gg * dx;
+            const fy = gg * dy;
+            tax = fx / ma;
+            tay = fy / ma;
+            tbx = -fx / mb;
+            tby = -fy / mb;
+            const sd_ok = sd >= eps;
+            const fx_ok = fx == fx;
+            const fy_ok = fy == fy;
+            att_ok = @select(bool, sd_ok, @select(bool, fx_ok, fy_ok, fx_ok), sd_ok);
+        }
+        const al = opacity * (one - dist / rv);
+
+        // walk the hit lanes with a bitmask instead of a branch per lane;
+        // hits are ~random so per-lane branches mispredict constantly
+        const Mask = std.meta.Int(.unsigned, lanes);
+        const valid = @select(bool, in_range, not_tiny, in_range);
+        var m: Mask = @bitCast(valid);
+        const att_m: Mask = @bitCast(att_ok);
+        const tax_a: [lanes]f64 = tax;
+        const tay_a: [lanes]f64 = tay;
+        const tbx_a: [lanes]f64 = tbx;
+        const tby_a: [lanes]f64 = tby;
+        const al_a: [lanes]f64 = al;
+        while (m != 0) : (m &= m - 1) {
+            const k: u32 = @ctz(m);
+            const bk = b + k;
+            if (ctx.has_attraction and (att_m >> @intCast(k)) & 1 != 0) {
+                g.vx[a] += tax_a[k];
+                g.vy[a] += tay_a[k];
+                g.vx[bk] += tbx_a[k];
+                g.vy[bk] += tby_a[k];
+            }
+            if (ctx.has_connections and p.conn_verts < max_conn_verts and al_a[k] > 0.001) {
+                const swap = g.idx[a] > g.idx[bk];
+                p.connect(if (swap) bk else a, if (swap) a else bk, al_a[k]);
+            }
+        }
+    }
+    while (b < hi) : (b += 1) p.orderedPair(ctx, a, b);
+}
+
+inline fn connect(p: *Physics, a: u32, b: u32, al: f64) void {
+    const g = &p.scratch;
+    const vi = p.conn_verts;
+    const o = vi * 3;
+    p.conn_pos[o] = @floatCast(g.x[a]);
+    p.conn_pos[o + 1] = @floatCast(g.y[a]);
+    p.conn_pos[o + 2] = 0;
+    p.conn_pos[o + 3] = @floatCast(g.x[b]);
+    p.conn_pos[o + 4] = @floatCast(g.y[b]);
+    p.conn_pos[o + 5] = 0;
+    p.conn_alpha[vi] = @floatCast(al);
+    p.conn_alpha[vi + 1] = @floatCast(al);
+    const c1 = p.palette[p.color[g.idx[a]]];
+    const c2 = p.palette[p.color[g.idx[b]]];
+    inline for (0..3) |k| {
+        p.conn_color[o + k] = @floatCast(c1[k]);
+        p.conn_color[o + 3 + k] = @floatCast(c2[k]);
+    }
+    p.conn_verts = vi + 2;
+}
+
 const Scratch = struct {
     x: []f64 = &.{},
     y: []f64 = &.{},
@@ -419,18 +528,12 @@ fn pairs(p: *Physics, a: Allocator) !void {
         const lo = c.start;
         const hi = c.start + c.len;
         var ai = lo;
-        while (ai < hi) : (ai += 1) {
-            var bi = ai + 1;
-            while (bi < hi) : (bi += 1) p.orderedPair(&ctx, ai, bi);
-        }
+        while (ai < hi) : (ai += 1) p.sweep(&ctx, ai, ai + 1, hi);
         for (forward) |d| {
             const ns = p.lookup.get(hashKey(c.cx +% d[0], c.cy +% d[1])) orelse continue;
             const nc = p.cells.items[ns];
             ai = lo;
-            while (ai < hi) : (ai += 1) {
-                var bi = nc.start;
-                while (bi < nc.start + nc.len) : (bi += 1) p.orderedPair(&ctx, ai, bi);
-            }
+            while (ai < hi) : (ai += 1) p.sweep(&ctx, ai, nc.start, nc.start + nc.len);
         }
     }
 
