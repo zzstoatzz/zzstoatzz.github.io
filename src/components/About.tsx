@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Mail } from 'lucide-react';
-import { GithubIcon, BlueskyIcon, TANGLED_DOLLY } from './icons';
+import { MailIcon, GithubIcon, BlueskyIcon, TANGLED_DOLLY } from './icons';
 
 const PDS = 'https://pds.zzstoatzz.io';
 const DID = 'did:plc:xbtmt2zjwlrfegqvch7fboei';
@@ -154,7 +153,7 @@ export default function About() {
                     </li>
                     <li>
                         <a href="mailto:n8@zzstoatzz.io">
-                            <Mail className="about-find-icon" aria-hidden size={16} />
+                            <MailIcon className="about-find-icon" width={16} height={16} />
                             <span>email</span>
                         </a>
                     </li>

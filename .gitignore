@@ -1,12 +1,17 @@
+# dependencies
 node_modules/
+
+# astro
 dist/
 .astro/
 
-.env
-.env*.local
+# misc
 .DS_Store
+*.pem
+.env*.local
 *.tsbuildinfo
 
+# zig
 zig/.zig-cache/
 zig/zig-out/
 zig/demo/dist/
