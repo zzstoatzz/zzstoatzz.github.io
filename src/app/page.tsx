@@ -3,6 +3,17 @@
 import React, { useState, useEffect } from 'react';
 import FirstVisitModal from './components/FirstVisitModal';
 
+// true when a one-finger drag on el should keep its default: inside a form
+// control (sliders) or an element that can scroll on its own
+function inScrollable(el: EventTarget | null): boolean {
+    if (el instanceof Element && el.closest('input, select, textarea')) return true;
+    for (let n = el instanceof Element ? el : null; n && n !== document.body; n = n.parentElement) {
+        const { overflowY } = getComputedStyle(n);
+        if ((overflowY === 'auto' || overflowY === 'scroll') && n.scrollHeight > n.clientHeight) return true;
+    }
+    return false;
+}
+
 export default function Home() {
     const [showModal, setShowModal] = useState(false);
     const [isInitialized, setIsInitialized] = useState(false);
@@ -31,8 +42,10 @@ export default function Home() {
         const prevViewport = meta?.getAttribute('content');
         meta?.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
         const block = (e: Event) => e.preventDefault();
+        // no pinch anywhere; no one-finger scroll unless inside a scrollable
+        // panel (the settings sidebar)
         const blockPinch = (e: TouchEvent) => {
-            if (e.touches.length > 1) e.preventDefault();
+            if (e.touches.length > 1 || !inScrollable(e.target)) e.preventDefault();
         };
         document.addEventListener('gesturestart', block, { passive: false });
         document.addEventListener('gesturechange', block, { passive: false });

@@ -6,13 +6,26 @@
     html {
         @apply h-full;
     }
-    /* homepage (see app/page.tsx): pin the page to the screen so nothing scrolls */
+    /* homepage (see app/page.tsx): one screen that never scrolls, with the
+     * background and particle layers spanning the large viewport so they run
+     * under iOS safari's status bar and toolbar. Safari keeps position:fixed
+     * layers out from under its bars, so here they are absolute instead. */
     html.home-locked,
     html.home-locked body {
-        position: fixed;
-        inset: 0;
+        height: 100vh;
+        height: 100lvh;
         overflow: hidden;
         overscroll-behavior: none;
+    }
+    html.home-locked body {
+        position: relative;
+    }
+    html.home-locked :is(#particle-canvas, #particle-overlay, #particle-webgl, .background-layer) {
+        position: absolute !important;
+        inset: 0 auto auto 0 !important;
+        width: 100% !important;
+        height: 100vh !important;
+        height: 100lvh !important;
     }
     body {
         @apply h-full;

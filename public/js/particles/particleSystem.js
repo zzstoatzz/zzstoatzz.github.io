@@ -98,6 +98,7 @@ export class ParticleSystem {
 
 			// Style and insert the WebGL canvas into the DOM
 			const el = renderer.domElement;
+			el.id = "particle-webgl";
 			el.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;";
 
 			// Insert before the overlay canvas (so overlay draws on top)
@@ -304,6 +305,7 @@ export class ParticleSystem {
 	// True when the document is taller than the viewport, i.e. the user can
 	// scroll. On such pages touch must scroll the page, not drive particles.
 	isPageScrollable() {
+		if (document.documentElement.classList.contains("home-locked")) return false;
 		return document.documentElement.scrollHeight > window.innerHeight + 1;
 	}
 
