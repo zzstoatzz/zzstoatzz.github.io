@@ -41,7 +41,7 @@ The homepage is one fixed screen (`html.home-locked`, set by `components/Home.ts
 
 ## Physics (`zig/`)
 
-`zig/src/physics.zig` owns the per-frame physics: spatial hash, pair attraction plus the connection-line buffer, soft walls, mouse force, particle update and shape collisions. `zig/src/wasm.zig` is the export surface JS calls. Particles live in a `std.MultiArrayList`; `resize` is the only call that allocates, and a test enforces that `step` never does, since JS holds raw views into the columns between resizes.
+`zig/src/physics.zig` owns the per-frame physics: cell grid, pair attraction plus the connection-line buffer, soft walls, mouse force, particle update and shape collisions. `zig/src/wasm.zig` is the export surface JS calls. Particles live in a `std.MultiArrayList` (f64 columns); the pair pass gathers them into cell order and does its math in f32 simd. `resize` is the only call that allocates; `step` takes no allocator, since JS holds raw views into the columns between resizes.
 
 Two builds: `physics.wasm` (simd128, current browsers) and `physics-nosimd.wasm` (baseline wasm, older engines); `wasmPhysics.ts` picks one by feature detection. Without wasm the particles draw but don't move.
 

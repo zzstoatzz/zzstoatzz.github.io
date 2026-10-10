@@ -146,6 +146,6 @@ export fn seed(s: u32) void {
 }
 
 export fn step(delta_ms: f64) bool {
-    p.step(gpa, delta_ms) catch return false;
+    p.step(delta_ms);
     return true;
 }
