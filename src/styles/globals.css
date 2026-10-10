@@ -23,7 +23,7 @@
     html.home-locked body {
         position: relative;
     }
-    html.home-locked :is(#particle-canvas, #particle-overlay, #particle-webgl, .background-layer) {
+    html.home-locked :is(#particle-canvas, #particle-overlay, #particle-webgl, #particle-webgpu, .background-layer) {
         position: absolute !important;
         inset: 0 auto auto 0 !important;
         width: 100% !important;
