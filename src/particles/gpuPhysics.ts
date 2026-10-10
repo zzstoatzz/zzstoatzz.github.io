@@ -11,6 +11,7 @@
 // (size, mass, color, by particle index = id) and for new particles; once
 // uploaded, positions and velocities live only on the gpu.
 import type { Settings } from "./config";
+import { lineCoverage } from "./config";
 import type { ParticleStore } from "./particleStore";
 import type { PhysicsExports } from "./wasmPhysics";
 
@@ -400,6 +401,7 @@ export class GpuPhysics {
 		const r = new Float32Array(R_SIZE / 4);
 		r[0] = this.width;
 		r[1] = this.height;
+		r[2] = lineCoverage(settings);
 		r.set(hex(settings.CONNECTION_COLOR), 4);
 		store.palette.forEach((rgb, k) => {
 			if (k < 16) r.set(rgb, 8 + k * 4);

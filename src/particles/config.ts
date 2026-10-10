@@ -89,3 +89,10 @@ export function hexToRgb(hex: string): Rgb {
 // 0..PARTICLE_COLORS.length-1 for the mix, CUSTOM_COLOR for the single color.
 export const PARTICLE_RGB = PARTICLE_COLORS.map(hexToRgb);
 export const CUSTOM_COLOR = PARTICLE_COLORS.length;
+
+// Lines draw one device pixel wide. CONNECTION_WIDTH (css px) sets how much
+// of that pixel a line covers, so a 0.3 px line shows at 0.3 css px worth of
+// opacity at any pixel ratio, like the 2D canvas's thin strokes.
+export function lineCoverage(settings: Settings) {
+	return (settings.CONNECTION_WIDTH || 1) * (window.devicePixelRatio || 1);
+}

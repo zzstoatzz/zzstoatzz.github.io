@@ -4,7 +4,8 @@
 // transparent canvas (blit.wgsl), so the page composites the same.
 struct P { pos: vec2f, vel: vec2f, mass: f32, radius: f32, color: u32, id: u32 };
 struct L { a: u32, b: u32, al: f32 };
-// size in css px, then the connection color; palette has a slot per color
+// size: css px, then line coverage (see webglRenderer.ts); then the
+// connection color; palette has a slot per color
 struct R { size: vec4f, conn: vec4f, palette: array<vec4f, 16> };
 @group(0) @binding(0) var<uniform> ru: R;
 @group(0) @binding(1) var<storage, read> parts: array<P>;
@@ -39,7 +40,7 @@ struct LineOut { @builtin(position) pos: vec4f, @location(0) col: vec4f };
   let p = parts[select(l.a, l.b, vi == 1u)];
   var o: LineOut;
   o.pos = clip(p.pos);
-  o.col = vec4f(mix(ru.conn.rgb, ru.palette[min(p.color, 15u)].rgb, 0.7), l.al);
+  o.col = vec4f(mix(ru.conn.rgb, ru.palette[min(p.color, 15u)].rgb, 0.7), l.al * ru.size.z);
   return o;
 }
 @fragment fn fs_line(i: LineOut) -> @location(0) vec4f { return i.col; }

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Settings } from "./config";
+import { lineCoverage } from "./config";
 import type { ParticleStore } from "./particleStore";
 
 const MAX_PARTICLES = 50000;
@@ -136,6 +137,7 @@ export class WebGLParticleRenderer {
 			uniforms: {
 				connectionColor: { value: new THREE.Vector3(0.392, 1.0, 0.855) },
 				tintAmount: { value: 0.7 },
+				coverage: { value: 1 },
 			},
 			vertexShader: `
 				attribute float alpha;
@@ -144,8 +146,9 @@ export class WebGLParticleRenderer {
 				varying vec3 vColor;
 				uniform vec3 connectionColor;
 				uniform float tintAmount;
+				uniform float coverage;
 				void main() {
-					vAlpha = alpha;
+					vAlpha = alpha * coverage;
 					vColor = mix(connectionColor, endpointColor, tintAmount);
 					gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 				}
@@ -217,6 +220,7 @@ export class WebGLParticleRenderer {
 			parseInt(cc.slice(3, 5), 16) / 255,
 			parseInt(cc.slice(5, 7), 16) / 255,
 		);
+		this.connectionsMesh.material.uniforms.coverage.value = lineCoverage(settings);
 
 		const posArr = attr(geo, "position").array;
 		const alphaArr = attr(geo, "alpha").array;
