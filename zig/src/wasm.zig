@@ -149,3 +149,68 @@ export fn step(delta_ms: f64) bool {
     p.step(delta_ms);
     return true;
 }
+
+// --- the webgpu path (gpu.zig); js records the passes, zig fills the inputs
+
+const Gpu = @import("gpu.zig");
+var g: Gpu = .{};
+
+export fn gpuShaderCount() u32 {
+    return Gpu.shaders.len;
+}
+export fn gpuShaderPtr(k: u32) [*]const u8 {
+    return Gpu.shaders[k].ptr;
+}
+export fn gpuShaderLen(k: u32) u32 {
+    return Gpu.shaders[k].len;
+}
+/// kernels before `render` need `gpuCommon` prepended
+export fn gpuShaderUsesCommon(k: u32) bool {
+    return Gpu.usesCommon(@fromBackingInt(@intCast(k)));
+}
+export fn gpuCommonPtr() [*]const u8 {
+    return Gpu.common.ptr;
+}
+export fn gpuCommonLen() u32 {
+    return Gpu.common.len;
+}
+export fn gpuLineCap() u32 {
+    return Gpu.line_cap;
+}
+export fn gpuMaxShapes() u32 {
+    return Gpu.max_shapes;
+}
+export fn gpuUniformsPtr() *const Gpu.Uniforms {
+    return &g.uni;
+}
+export fn gpuShapesPtr() *const [Gpu.max_shapes]Gpu.GpuShape {
+    return &g.shapes;
+}
+
+/// packs a frame's uniforms (for one substep) and returns the substep count
+export fn gpuFrame(delta_ms: f64) u32 {
+    return g.frame(&p, delta_ms);
+}
+
+/// uniforms for a one-off kernel (compact, piston) over n particles
+export fn gpuPrepare(n: u32, aux: u32) void {
+    g.pack(&p, 0);
+    g.uni.n = n;
+    g.uni.aux = aux;
+}
+
+/// the step kernel's readback; returns whether the crowd is at rest
+export fn gpuStats(speed_sum: u32, wanted: u32) bool {
+    return g.stats(&p, speed_sum, wanted);
+}
+
+/// the cpu path's rest check, from its own columns: returns whether at rest
+export fn cpuRest() bool {
+    var sum: f64 = 0;
+    for (p.vx[0..p.n], p.vy[0..p.n]) |vx, vy| sum += @sqrt(vx * vx + vy * vy);
+    return g.rest.update(sum / @as(f64, @floatFromInt(@max(p.n, 1))), p.mouse.active);
+}
+
+export fn restWake() void {
+    g.rest.wake();
+}

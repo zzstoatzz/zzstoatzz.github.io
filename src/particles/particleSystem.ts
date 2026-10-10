@@ -1,6 +1,10 @@
 // The particle system: owns the canvases, the particle store, input and the
-// frame loop. Physics runs in wasm (wasmPhysics.ts); drawing goes through
-// WebGL when it is available and Canvas 2D otherwise.
+// frame loop. With WebGPU, physics and drawing both run on the gpu
+// (gpuPhysics.ts, kernels from zig). Otherwise physics runs in zig/wasm on the
+// cpu (wasmPhysics.ts) and drawing goes through WebGL, or Canvas 2D without it.
+//
+// Either way, once the crowd settles (zig decides) the frame loop stops and
+// the last frame stays on screen until a touch, a resize or a settings change.
 import type { Settings } from "./config";
 import { spawnParticle, applyParticleSettings, randomColor } from "./particle";
 import { ParticleStore } from "./particleStore";
@@ -10,6 +14,7 @@ import { CanvasRenderer } from "./canvasRenderer";
 import { MouseEffects } from "./mouseEffects";
 import { ShapeField } from "./shapes";
 import { ShapeEditor } from "./shapeEditor";
+import { GpuPhysics } from "./gpuPhysics";
 import type { Connections } from "./wasmPhysics";
 import { NO_CONNECTIONS, WasmPhysics } from "./wasmPhysics";
 import type { WebGLParticleRenderer } from "./webglRenderer";
@@ -40,6 +45,10 @@ export class ParticleSystem {
 	shapeEditor: ShapeEditor;
 	uiController: UIController;
 	private wasmPhysics: WasmPhysics | null = null;
+	// the WebGPU path, null until it loads (or for good without WebGPU)
+	gpu: GpuPhysics | null = null;
+	// settled: no physics, no drawing, no frame loop until wake()
+	private resting = false;
 
 	private animationFrameId: number | null = null;
 	private lastTimestamp = 0;
@@ -82,9 +91,15 @@ export class ParticleSystem {
 
 		this.init();
 
-		// both load in the background; until then Canvas 2D draws and nothing moves
-		this.initWebGL();
-		this.initWasmPhysics();
+		// these load in the background; until then Canvas 2D draws and nothing moves
+		this.initBackends();
+	}
+
+	// wasm first (the gpu kernels come out of it), then WebGPU, else WebGL
+	private async initBackends() {
+		const wasm = await this.initWasmPhysics();
+		if (wasm && (await this.initGpu(wasm))) return;
+		await this.initWebGL();
 	}
 
 	private async initWasmPhysics() {
@@ -93,9 +108,59 @@ export class ParticleSystem {
 			wasm.attach(this.store);
 			this.wasmPhysics = wasm;
 			console.log("wasm physics initialized");
+			return wasm;
 		} catch (e) {
 			console.warn("wasm physics not available, particles will stay still:", e);
+			return null;
 		}
+	}
+
+	private async initGpu(wasm: WasmPhysics) {
+		// ?gpu=0 forces the cpu path, for comparing the two
+		if (new URLSearchParams(window.location.search).get("gpu") === "0") return false;
+		try {
+			const gpu = await GpuPhysics.create(wasm.w, this.canvas.width, this.canvas.height);
+			if (!gpu) return false;
+			this.mountLayer(gpu.canvas, "particle-webgpu");
+			// the gpu takes the particles from their current state
+			gpu.sync(this.store);
+			gpu.onLost = () => {
+				// positions stay where the gpu last left the store: the cpu
+				// path picks up from the spawn state
+				this.gpu?.canvas.remove();
+				this.gpu = null;
+				this.wake();
+				this.initWebGL();
+			};
+			this.gpu = gpu;
+			this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+			console.log("webgpu physics initialized");
+			return true;
+		} catch (e) {
+			console.warn("webgpu not available, using wasm physics:", e);
+			return false;
+		}
+	}
+
+	// Put a renderer's canvas under the overlay (which draws on top).
+	private mountLayer(el: HTMLCanvasElement, id: string) {
+		el.id = id;
+		el.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;";
+		if (this.overlayCanvas?.parentElement) {
+			this.overlayCanvas.parentElement.insertBefore(el, this.overlayCanvas);
+		} else {
+			this.canvas.parentElement?.appendChild(el);
+		}
+	}
+
+	// Leave rest: the loop runs again and zig's calm streak starts over.
+	wake() {
+		this.wasmPhysics?.w.restWake();
+		if (this.gpu) this.gpu.resting = false;
+		if (!this.resting) return;
+		this.resting = false;
+		this.lastTimestamp = 0;
+		if (this.animationFrameId === null) this.animationFrameId = requestAnimationFrame((t) => this.animate(t));
 	}
 
 	private async initWebGL() {
@@ -103,17 +168,7 @@ export class ParticleSystem {
 			const { WebGLParticleRenderer } = await import("./webglRenderer");
 			const renderer = new WebGLParticleRenderer(this.canvas.width, this.canvas.height);
 
-			// Style and insert the WebGL canvas into the DOM
-			const el = renderer.domElement;
-			el.id = "particle-webgl";
-			el.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;";
-
-			// Insert before the overlay canvas (so overlay draws on top)
-			if (this.overlayCanvas?.parentElement) {
-				this.overlayCanvas.parentElement.insertBefore(el, this.overlayCanvas);
-			} else {
-				this.canvas.parentElement?.appendChild(el);
-			}
+			this.mountLayer(renderer.domElement, "particle-webgl");
 
 			this.webglRenderer = renderer;
 
@@ -152,7 +207,13 @@ export class ParticleSystem {
 		// that the soft walls only slowly dissolve.
 		const w2 = this.canvas.width;
 		const h2 = this.canvas.height;
-		if (w2 < oldW || h2 < oldH) this.pistonWalls(w2, h2);
+		if (w2 < oldW || h2 < oldH) {
+			this.pistonWalls(w2, h2);
+			if (this.gpu && this.wasmPhysics) {
+				this.wasmPhysics.configure(this);
+				this.gpu.piston();
+			}
+		}
 
 		if (this.overlayCanvas) {
 			this.overlayCanvas.width = this.canvas.width;
@@ -162,10 +223,12 @@ export class ParticleSystem {
 		if (this.webglRenderer) {
 			this.webglRenderer.resize(this.canvas.width, this.canvas.height);
 		}
+		this.gpu?.resize(this.canvas.width, this.canvas.height);
 
 		if (this.shapeField) {
 			this.shapeField.resize(this.canvas.width, this.canvas.height);
 		}
+		this.wake();
 	}
 
 	// Bring particles left outside a shrunken canvas back inside, moving
@@ -193,6 +256,14 @@ export class ParticleSystem {
 		this.canvas.style.zIndex = "10";
 
 		document.addEventListener("mousemove", (e) => this.handleMouseMove(e));
+
+		// anything that can change the picture wakes a resting crowd; the
+		// shape editor redraws its preview as the pointer moves
+		document.addEventListener("pointerdown", () => this.wake());
+		document.addEventListener("keydown", () => this.wake());
+		document.addEventListener("pointermove", () => {
+			if (this.shapeEditor.active) this.wake();
+		});
 
 		document.addEventListener("mousedown", (e) => {
 			if (this.shapeEditor.active) return;
@@ -322,6 +393,7 @@ export class ParticleSystem {
 
 	private applySettings(settings: Settings) {
 		this.settings = { ...settings };
+		this.wake();
 
 		const serialized = settings.SHAPES || "";
 		if (this.shapeField && serialized !== this.shapeField.serialize()) {
@@ -349,6 +421,7 @@ export class ParticleSystem {
 		const s = this.store;
 		for (let i = 0; i < s.count; i++) s.color[i] = randomColor(settings);
 		s.version++;
+		this.wake();
 	}
 
 	// "randomize colors": back to the mix if one color was on, then reshuffle.
@@ -372,19 +445,22 @@ export class ParticleSystem {
 		}
 	}
 
-	// The physics is zig/wasm (zig/src/physics.zig, see wasmPhysics.js). Until
-	// the module loads, or if it can't, the particles are drawn but stay put.
+	// The cpu physics is zig/wasm (zig/src/physics.zig, see wasmPhysics.ts).
+	// Until the module loads, or if it can't, the particles are drawn but stay
+	// put. Returns whether the crowd is at rest.
 	private updateParticles(deltaTime: number) {
-		if (!this.wasmPhysics) return;
+		if (!this.wasmPhysics) return false;
 		try {
-			this.wasmPhysics.step(this, deltaTime);
+			return this.wasmPhysics.step(this, deltaTime);
 		} catch (e) {
 			console.warn("wasm physics failed:", e);
 			this.wasmPhysics = null;
+			return false;
 		}
 	}
 
 	private animate(timestamp = 0) {
+		this.animationFrameId = null;
 		const elapsed = timestamp - (this.lastTimestamp || timestamp);
 		this.lastTimestamp = timestamp;
 		// never negative: a restarted loop starts from timestamp 0
@@ -392,32 +468,25 @@ export class ParticleSystem {
 
 		this.settings = this.settingsManager.getAllSettings();
 
-		// Physics (same for both paths)
-		this.updateParticles(deltaTime);
-
-		const conn = this.connections;
-		if (this.webglRenderer) {
+		let drewEffects: boolean;
+		if (this.gpu && this.wasmPhysics) {
+			// --- WebGPU path: zig packs the frame, the gpu steps and draws ---
+			this.wasmPhysics.configure(this);
+			this.gpu.frame(deltaTime, this.store, this.settings);
+			this.resting = this.gpu.resting;
+			drewEffects = this.drawOverlay(timestamp);
+		} else if (this.webglRenderer) {
 			// --- WebGL path ---
-			// Clear overlay for mouse effects
-			if (this.overlayCanvas && this.overlayDirty) {
-				this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
-			}
-
-			// Upload particle data and pre-built connections to GPU, then render
+			this.resting = this.updateParticles(deltaTime);
+			const conn = this.connections;
 			this.webglRenderer.updateParticles(this.store, this.store.count);
 			this.webglRenderer.uploadConnections(conn.pos, conn.alpha, conn.color, conn.verts, this.settings);
 			this.webglRenderer.render();
-
-			this.shapeField.draw(this.overlayCtx, this.shapeEditor.preview, this.shapeEditor.selected);
-
-			// Mouse effects on overlay (Canvas 2D)
-			const drewEffects = this.mouseEffects.updateAndDraw(
-				timestamp, this.mouseX, this.mouseY, this.isMouseDown, this.settings,
-			);
-			const ed = this.shapeEditor;
-			this.overlayDirty = drewEffects || this.shapeField.shapes.length > 0 || ed.preview !== null || ed.selected !== null;
+			drewEffects = this.drawOverlay(timestamp);
 		} else {
 			// --- Canvas 2D fallback ---
+			this.resting = this.updateParticles(deltaTime);
+			const conn = this.connections;
 			this.canvasRenderer.clear(this.canvas.width, this.canvas.height);
 
 			if (this.overlayCanvas) {
@@ -426,7 +495,7 @@ export class ParticleSystem {
 
 			this.canvasRenderer.drawConnections(conn.pos, conn.alpha, conn.verts, this.settings);
 
-			this.mouseEffects.updateAndDraw(
+			drewEffects = this.mouseEffects.updateAndDraw(
 				timestamp, this.mouseX, this.mouseY, this.isMouseDown, this.settings,
 			);
 
@@ -436,7 +505,28 @@ export class ParticleSystem {
 			this.shapeField.draw(this.overlayCtx, this.shapeEditor.preview, this.shapeEditor.selected);
 		}
 
+		// at rest with nothing animating on top, the last frame stays on screen
+		// and the loop stops until wake()
+		const ed = this.shapeEditor;
+		const still = this.resting && !drewEffects && !this.isMouseDown && !ed.active && ed.preview === null && ed.selected === null;
+		if (still) return;
+		this.resting = false;
 		this.animationFrameId = requestAnimationFrame((t) => this.animate(t));
+	}
+
+	// Shapes and mouse effects, on the overlay above the particles. Returns
+	// whether a mouse effect drew (it's still animating).
+	private drawOverlay(timestamp: number) {
+		if (this.overlayCanvas && this.overlayDirty) {
+			this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+		}
+		this.shapeField.draw(this.overlayCtx, this.shapeEditor.preview, this.shapeEditor.selected);
+		const drewEffects = this.mouseEffects.updateAndDraw(
+			timestamp, this.mouseX, this.mouseY, this.isMouseDown, this.settings,
+		);
+		const ed = this.shapeEditor;
+		this.overlayDirty = drewEffects || this.shapeField.shapes.length > 0 || ed.preview !== null || ed.selected !== null;
+		return drewEffects;
 	}
 
 	stop() {
@@ -451,6 +541,9 @@ export class ParticleSystem {
 		this.stop();
 		this.lastTimestamp = 0;
 		this.store.resize(0);
+		this.gpu?.truncate(0);
+		this.wasmPhysics?.w.restWake();
+		this.resting = false;
 		this.spawnParticles(this.settings.PARTICLE_COUNT, this.settings);
 		this.animate();
 	}

@@ -4,12 +4,15 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const tests = b.addTest(.{ .root_module = b.createModule(.{
-        .root_source_file = b.path("src/physics.zig"),
-        .target = target,
-        .optimize = optimize,
-    }) });
-    b.step("test", "run unit tests").dependOn(&b.addRunArtifact(tests).step);
+    const test_step = b.step("test", "run unit tests");
+    for ([_][]const u8{ "src/physics.zig", "src/gpu.zig" }) |root| {
+        const tests = b.addTest(.{ .root_module = b.createModule(.{
+            .root_source_file = b.path(root),
+            .target = target,
+            .optimize = optimize,
+        }) });
+        test_step.dependOn(&b.addRunArtifact(tests).step);
+    }
 
     // physics.wasm: current browsers, with simd128 (safari 16.4+, chrome and
     // firefox 91+). physics-nosimd.wasm: the same code for the baseline wasm

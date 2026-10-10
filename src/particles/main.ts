@@ -16,6 +16,7 @@ export function initParticles(canvas: HTMLCanvasElement, overlay?: HTMLCanvasEle
 	if (old) {
 		old.stop();
 		old.webglRenderer?.dispose();
+		old.gpu?.dispose();
 		window.particleSystem = null;
 	}
 

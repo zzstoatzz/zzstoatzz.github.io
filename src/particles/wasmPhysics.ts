@@ -4,6 +4,7 @@
 //
 // The wasm module owns the particle state: once attached, the ParticleStore's
 // arrays are views into wasm memory, so a step is one call with no copying.
+import type { GpuExports } from "./gpuPhysics";
 import type { ParticleStore } from "./particleStore";
 import type { ParticleSystem } from "./particleSystem";
 
@@ -60,6 +61,9 @@ export interface PhysicsExports {
 	): void;
 	seed(s: number): void;
 	step(deltaMs: number): number;
+	// the rest check (gpu.zig Rest) for the cpu path, and waking it
+	cpuRest(): number;
+	restWake(): void;
 }
 
 // The connection lines built by the last step: vertex pairs with (x, y, z)
@@ -135,7 +139,7 @@ const SIMD_PROBE = new Uint8Array([
 ]);
 
 export class WasmPhysics {
-	private w: PhysicsExports;
+	readonly w: PhysicsExports & GpuExports;
 	private conn: (Connections & { buffer: ArrayBuffer }) | null = null;
 
 	// physics.wasm uses simd128 (safari 16.4+, chrome/firefox 91+); older
@@ -152,10 +156,10 @@ export class WasmPhysics {
 
 	static async fromBytes(bytes: BufferSource): Promise<WasmPhysics> {
 		const { instance } = await WebAssembly.instantiate(bytes, {});
-		return new WasmPhysics(instance.exports as unknown as PhysicsExports);
+		return new WasmPhysics(instance.exports as unknown as PhysicsExports & GpuExports);
 	}
 
-	constructor(exports: PhysicsExports) {
+	constructor(exports: PhysicsExports & GpuExports) {
 		this.w = exports;
 		this.w.seed((Math.random() * 2 ** 32) >>> 0);
 	}
@@ -181,9 +185,9 @@ export class WasmPhysics {
 		return this.conn;
 	}
 
-	// One physics step for the given system, whose store must be attached to
-	// this module.
-	step(ps: ParticleSystem, deltaTime: number, now = performance.now()) {
+	// Hand the system's settings, shapes and mouse to zig. Both paths need
+	// this before a frame; the gpu path also before a piston push.
+	configure(ps: ParticleSystem, now = performance.now()) {
 		const w = this.w;
 		const s = ps.settings;
 		w.setSettings(
@@ -214,12 +218,19 @@ export class WasmPhysics {
 
 		const m = mouseParams(ps, now);
 		w.setMouse(m.active, m.x, m.y, m.radius, m.force, m.vortex, m.down, m.spinning, m.vortexIntensity, m.speedMultiplier);
+	}
 
+	// One cpu physics step for the given system, whose store must be attached
+	// to this module. Returns whether the crowd has come to rest.
+	step(ps: ParticleSystem, deltaTime: number, now = performance.now()): boolean {
+		const w = this.w;
+		this.configure(ps, now);
 		if (!w.step(deltaTime)) throw new Error("wasm physics: step failed");
 		ps.store.sync();
 
 		const conn = this.connViews();
 		conn.verts = w.connVerts();
 		ps.connections = conn;
+		return !!w.cpuRest();
 	}
 }
