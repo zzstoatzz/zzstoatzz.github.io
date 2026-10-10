@@ -18,7 +18,7 @@ struct U {
   cs: f32, inv_cs: f32, r: f32, r2: f32,
   fs: f32, min_dist: f32, opacity: f32, drag: f32,
   elasticity: f32, gravity: f32, w: f32, h: f32,
-  dt: f32, wall_strength: f32, frame: u32, line_cap: u32,
+  dt: f32, inv_band: f32, frame: u32, line_cap: u32,
   m_active: u32, m_vortex: u32, m_down: u32, m_spinning: u32,
   mx: f32, my: f32, m_radius: f32, m_force: f32,
   m_vint: f32, m_speed: f32, build_lines: u32, has_attr: u32,

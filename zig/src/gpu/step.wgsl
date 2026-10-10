@@ -12,12 +12,16 @@
 @group(0) @binding(6) var<storage, read_write> st: array<atomic<u32>>;
 @group(0) @binding(7) var<storage, read> shapes: array<Shape>;
 
-// soft wall: the crowd's average density over the part of the disc past it
-fn wall(d: f32) -> f32 {
-  let dd = max(d, u.min_dist);
-  if (dd >= u.r) { return 0.0; }
-  let q = sqrt(u.r * u.r - dd * dd);
-  return u.wall_strength * (2.0 * log((u.r + q) / dd) - 2.0 * q / u.r);
+// the pair force on a particle at p from one of mass m at q (physics.zig
+// sweep): 1/d^2, flat inside min_dist, faded out over the last stretch of r
+fn pair(p: vec2f, q: vec2f, m: f32) -> vec2f {
+  let d = q - p;
+  let d2 = dot(d, d);
+  if (d2 >= u.r2 || d2 < 1e-6) { return vec2f(0.0); }
+  let dist = sqrt(d2);
+  let sd = max(dist, u.min_dist);
+  let t = clamp((u.r - dist) * u.inv_band, 0.0, 1.0);
+  return (u.fs * m * t * t * (3.0 - 2.0 * t) / (sd * sd * dist)) * d;
 }
 
 fn edge(sh: Shape, k: u32) -> vec3f {
@@ -50,6 +54,11 @@ fn inside(sh: Shape, p: vec2f, pad: f32) -> bool {
   let attr = u.has_attr != 0u;
   let lines_on = u.build_lines != 0u;
   var wanted = 0u;
+  let nl = p.x < u.r;
+  let nt = p.y < u.r;
+  let nx = nl || u.w - p.x < u.r;
+  let ny = nt || u.h - p.y < u.r;
+  let walls = attr && u.fs < 0.0 && (nx || ny);
   for (var oy = -1; oy <= 1; oy++) {
     let cy = c.y + oy;
     if (cy < 0 || cy >= i32(u.rows)) { continue; }
@@ -58,17 +67,22 @@ fn inside(sh: Shape, p: vec2f, pad: f32) -> bool {
     let lo = starts[row + u32(max(c.x - 1, 0))];
     let hi = starts[row + u32(min(c.x + 1, i32(u.cols) - 1)) + 1u];
     for (var j = lo; j < hi; j++) {
-      if (j == i) { continue; }
       let o = sorted[j];
+      if (walls) {
+        // soft walls (physics.zig wallForce): the mirror images of the
+        // neighbors, this particle included, push like the crowd does
+        let mx = select(2.0 * u.w - o.pos.x, -o.pos.x, nl);
+        let my = select(2.0 * u.h - o.pos.y, -o.pos.y, nt);
+        if (nx) { dv += pair(p, vec2f(mx, o.pos.y), o.mass); }
+        if (ny) { dv += pair(p, vec2f(o.pos.x, my), o.mass); }
+        if (nx && ny) { dv += pair(p, vec2f(mx, my), o.mass); }
+      }
+      if (j == i) { continue; }
       let d = o.pos - p;
       let d2 = dot(d, d);
       if (d2 >= u.r2 || d2 < 1e-6) { continue; }
       let dist = sqrt(d2);
-      if (attr) {
-        // physics.zig: fx = fs*ma*mb/sd^2 * dx/dist, then va += fx/ma
-        let sd = max(dist, u.min_dist);
-        dv += (u.fs * o.mass / (sd * sd * dist)) * d;
-      }
+      if (attr) { dv += pair(p, o.pos, o.mass); }
       if (lines_on && j > i) {
         let al = u.opacity * (1.0 - dist / u.r);
         if (al > 0.001) {
@@ -84,13 +98,6 @@ fn inside(sh: Shape, p: vec2f, pad: f32) -> bool {
         }
       }
     }
-  }
-
-  if (attr && u.fs < 0.0) {
-    if (p.x < u.r) { dv.x -= wall(p.x); }
-    if (u.w - p.x < u.r) { dv.x += wall(u.w - p.x); }
-    if (p.y < u.r) { dv.y -= wall(p.y); }
-    if (u.h - p.y < u.r) { dv.y += wall(u.h - p.y); }
   }
 
   if (u.m_active != 0u) {

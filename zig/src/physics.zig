@@ -57,6 +57,12 @@ pub const Shape = struct {
 
 pub const max_conn_verts = 200000 * 2;
 
+/// the pair force fades to zero over this outer fraction of the interaction
+/// radius (a smoothstep). cut off abruptly, every dense line of particles
+/// pushes everything within r and nothing past it, so the crowd stacks
+/// copies of a wall's crust one radius in.
+pub const taper_band = 0.25;
+
 /// r-cell occupancy from which the grid switches to half-r cells
 const SUB_AT = 3.0;
 
@@ -233,8 +239,10 @@ fn updateGrid(p: *Physics) void {
 const PairCtx = struct {
     has_attraction: bool,
     has_connections: bool,
+    r: K,
     r2: K,
     inv_r: K,
+    inv_band: K,
     force_scale: K,
     min_dist: K,
     opacity: K,
@@ -268,6 +276,10 @@ inline fn sweep(p: *Physics, ctx: *const PairCtx, a: u32, lo: u32, hi: u32) void
     const eps: V = @splat(1e-6);
     const min_dist: V = @splat(ctx.min_dist);
     const force_scale: V = @splat(ctx.force_scale);
+    const rr: V = @splat(ctx.r);
+    const inv_band: V = @splat(ctx.inv_band);
+    const three: V = @splat(3);
+    const two: V = @splat(2);
     const opacity: V = @splat(ctx.opacity);
     const inv_r: V = @splat(ctx.inv_r);
     const one: V = @splat(1);
@@ -290,7 +302,9 @@ inline fn sweep(p: *Physics, ctx: *const PairCtx, a: u32, lo: u32, hi: u32) void
         if (ctx.has_attraction) {
             const mb: V = g.mass[b..][0..lanes].*;
             const sd = @max(dist, min_dist);
-            const k = @select(K, valid, force_scale / (sd * sd * dist), zero);
+            const t = std.math.clamp((rr - dist) * inv_band, zero, one);
+            const taper = t * t * (three - two * t);
+            const k = @select(K, valid, force_scale * taper / (sd * sd * dist), zero);
             const kx = k * dx;
             const ky = k * dy;
             // masked lanes: k is 0 but dx may be inf or NaN there
@@ -382,8 +396,10 @@ fn pairs(p: *Physics) void {
     const ctx: PairCtx = .{
         .has_attraction = has_attraction,
         .has_connections = has_connections,
+        .r = @floatCast(r),
         .r2 = @floatCast(r * r),
         .inv_r = @floatCast(1 / r),
+        .inv_band = @floatCast(1 / (taper_band * r)),
         .force_scale = @floatCast(s.attract * p.dt),
         .min_dist = @floatCast(s.smoothing_factor * r),
         .opacity = @floatCast(s.connection_opacity),
@@ -488,46 +504,92 @@ inline fn mousePush(p: *Physics, i: usize) void {
     }
 }
 
-/// soft walls: each wall pushes like the crowd's average
-/// density spread over the part of the interaction disc beyond it.
+/// soft walls: a wall acts as a mirror. a particle within r of one is pushed
+/// by the mirror images of its neighbors (itself included) beyond it, with
+/// the pair force, so the wall pushes exactly as hard as the crowd pressing
+/// on it: a crowd piled up by gravity gets a floor as strong as it needs, and
+/// nothing builds up a crust on the edge.
 fn wallForce(p: *Physics) void {
     const s = p.settings;
     const r = s.interaction_radius;
     if (!(s.attract <= -1e-6) or r <= 0) return;
-    var total_mass: f64 = 0;
-    for (p.mass[0..p.n]) |m| total_mass += m;
     const ctx: WallCtx = .{
         .r = r,
-        .strength = (s.attract * p.dt * total_mass) / (s.width * s.height),
+        .r2 = r * r,
+        .inv_band = 1 / (taper_band * r),
+        .fs = s.attract * p.dt,
         .min_dist = s.smoothing_factor * r,
     };
+    const w = s.width;
+    const h = s.height;
+    const inv = 1 / p.cell_size;
+    // a mirror image is within r only of a source within r of the same
+    // wall, so only the cells that far in hold sources
+    const edge_cells = p.reach + 1;
+    // pairs() left f32 copies of the columns in cell order (scratch), which
+    // read far better than the columns through `sorted`
+    const g = &p.scratch;
     for (0..p.n) |i| {
-        if (p.x[i] < r) p.vx[i] -= ctx.push(p.x[i]);
-        if (s.width - p.x[i] < r) p.vx[i] += ctx.push(s.width - p.x[i]);
-        if (p.y[i] < r) p.vy[i] -= ctx.push(p.y[i]);
-        if (s.height - p.y[i] < r) p.vy[i] += ctx.push(s.height - p.y[i]);
+        const x = p.x[i];
+        const y = p.y[i];
+        const nl = x < r;
+        const nr = w - x < r;
+        const nt = y < r;
+        const nb = h - y < r;
+        const nx = nl or nr;
+        const ny = nt or nb;
+        if (!(nx or ny)) continue;
+        const cx = cellAt(x, inv, p.gw);
+        const cy = cellAt(y, inv, p.gh);
+        var x0 = cx -| p.reach;
+        var x1 = @min(cx + p.reach, p.gw - 1);
+        var y0 = cy -| p.reach;
+        var y1 = @min(cy + p.reach, p.gh - 1);
+        if (nx and !ny) {
+            if (nl) x1 = @min(x1, edge_cells - 1) else x0 = @max(x0, p.gw -| edge_cells);
+        } else if (ny and !nx) {
+            if (nt) y1 = @min(y1, edge_cells - 1) else y0 = @max(y0, p.gh -| edge_cells);
+        }
+        var f: [2]f64 = .{ 0, 0 };
+        for (y0..y1 + 1) |row| {
+            const c: u32 = @intCast(row * p.gw);
+            for (p.cell_start[c + x0]..p.cell_start[c + x1 + 1]) |k| {
+                const ox: f64 = g.x[k];
+                const oy: f64 = g.y[k];
+                const m: f64 = g.mass[k];
+                const mx = if (nl) -ox else 2 * w - ox;
+                const my = if (nt) -oy else 2 * h - oy;
+                if (nx) ctx.add(&f, x, y, mx, oy, m);
+                if (ny) ctx.add(&f, x, y, ox, my, m);
+                if (nx and ny) ctx.add(&f, x, y, mx, my, m);
+            }
+        }
+        p.vx[i] += f[0];
+        p.vy[i] += f[1];
     }
 }
 
 const WallCtx = struct {
     r: f64,
-    strength: f64,
+    r2: f64,
+    inv_band: f64,
+    fs: f64,
     min_dist: f64,
 
-    fn push(c: WallCtx, d: f64) f64 {
-        const dd = jsMax(d, c.min_dist);
-        if (dd >= c.r) return 0;
-        const q = @sqrt(c.r * c.r - dd * dd);
-        return c.strength * (2 * @log((c.r + q) / dd) - (2 * q) / c.r);
+    /// the pair force on (x, y) from a mirror image of mass m at (ix, iy)
+    inline fn add(c: WallCtx, f: *[2]f64, x: f64, y: f64, ix: f64, iy: f64, m: f64) void {
+        const dx = ix - x;
+        const dy = iy - y;
+        const d2 = dx * dx + dy * dy;
+        if (!(d2 < c.r2) or d2 < 1e-6) return;
+        const dist = @sqrt(d2);
+        const sd = @max(dist, c.min_dist);
+        const t = std.math.clamp((c.r - dist) * c.inv_band, 0, 1);
+        const k = c.fs * m * t * t * (3 - 2 * t) / (sd * sd * dist);
+        f[0] += k * dx;
+        f[1] += k * dy;
     }
 };
-
-/// js Math.max(a, b): NaN-propagating, +0 over -0
-inline fn jsMax(a: f64, b: f64) f64 {
-    if (std.math.isNan(a) or std.math.isNan(b)) return std.math.nan(f64);
-    if (a == b) return if (std.math.signbit(a)) b else a;
-    return if (a > b) a else b;
-}
 
 /// Particle.update
 fn updateParticle(p: *Physics, i: usize) void {

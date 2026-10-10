@@ -27,7 +27,7 @@ pub const Uniforms = extern struct {
     w: f32 = 0,
     h: f32 = 0,
     dt: f32 = 0,
-    wall_strength: f32 = 0,
+    inv_band: f32 = 0,
     frame: u32 = 0,
     line_cap: u32 = line_cap,
     m_active: u32 = 0,
@@ -148,9 +148,6 @@ pub fn pack(g: *Gpu, p: *const Physics, dt_ms: f64) void {
     const cols: u32 = @intFromFloat(@max(1, @ceil(w / cs)));
     const rows: u32 = @intFromFloat(@max(1, @ceil(h / cs)));
 
-    var total_mass: f64 = 0;
-    for (p.mass[0..p.n]) |mass| total_mass += mass;
-
     var nshapes: u32 = 0;
     for (p.shapes.items[0..@min(p.shapes.items.len, max_shapes)]) |sh| {
         var gs: GpuShape = .{ .c = .{ @floatCast(sh.x), @floatCast(sh.y), @floatCast(sh.r), 0 }, .n = undefined, .off = undefined };
@@ -180,7 +177,7 @@ pub fn pack(g: *Gpu, p: *const Physics, dt_ms: f64) void {
         .w = @floatCast(w),
         .h = @floatCast(h),
         .dt = @floatCast(dt),
-        .wall_strength = @floatCast(s.attract * dt * total_mass / (w * h)),
+        .inv_band = @floatCast(1 / (Physics.taper_band * r)),
         .frame = g.frames,
         .m_active = @intFromBool(m.active),
         .m_vortex = @intFromBool(m.vortex),
