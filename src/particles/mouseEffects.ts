@@ -140,10 +140,12 @@ export class MouseEffects {
 	}
 
 	// Main render — draws all mouse effects to overlay canvas.
-	updateAndDraw(timestamp: number, mouseX: number, mouseY: number, isMouseDown: boolean, settings: Settings) {
+	// Returns whether it may have drawn anything, so the caller knows the
+	// overlay needs clearing next frame.
+	updateAndDraw(timestamp: number, mouseX: number, mouseY: number, isMouseDown: boolean, settings: Settings): boolean {
 		const ctx = this.ctx;
 
-		if (!settings.ENABLE_VORTEX_FORCE) return;
+		if (!settings.ENABLE_VORTEX_FORCE) return false;
 
 		let holdIntensity = 0;
 		if (this.holdStartTime && isMouseDown) {
@@ -214,6 +216,7 @@ export class MouseEffects {
 		}
 
 		ctx.restore();
+		return this.effects.length > 0 || (isMouseDown && this.holdStartTime !== null);
 	}
 
 	private drawLightningAfterGlow(ctx: CanvasRenderingContext2D, x: number, y: number, effect: Effect, progress: number) {

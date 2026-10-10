@@ -43,6 +43,9 @@ export class ParticleSystem {
 
 	private animationFrameId: number | null = null;
 	private lastTimestamp = 0;
+	// whether the overlay may hold last frame's drawing; an empty overlay is
+	// left alone instead of cleared every frame
+	private overlayDirty = true;
 	private singleColor = false;
 	private touchStartX = 0;
 	private touchStartY = 0;
@@ -396,7 +399,7 @@ export class ParticleSystem {
 		if (this.webglRenderer) {
 			// --- WebGL path ---
 			// Clear overlay for mouse effects
-			if (this.overlayCanvas) {
+			if (this.overlayCanvas && this.overlayDirty) {
 				this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
 			}
 
@@ -408,9 +411,11 @@ export class ParticleSystem {
 			this.shapeField.draw(this.overlayCtx, this.shapeEditor.preview, this.shapeEditor.selected);
 
 			// Mouse effects on overlay (Canvas 2D)
-			this.mouseEffects.updateAndDraw(
+			const drewEffects = this.mouseEffects.updateAndDraw(
 				timestamp, this.mouseX, this.mouseY, this.isMouseDown, this.settings,
 			);
+			const ed = this.shapeEditor;
+			this.overlayDirty = drewEffects || this.shapeField.shapes.length > 0 || ed.preview !== null || ed.selected !== null;
 		} else {
 			// --- Canvas 2D fallback ---
 			this.canvasRenderer.clear(this.canvas.width, this.canvas.height);
