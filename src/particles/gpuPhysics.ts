@@ -48,7 +48,10 @@ const U_SIZE = 144;
 const R_SIZE = 16 * 2 + 16 * 16; // size, connection color, 16 palette slots
 const WG = 128;
 
-const B = GPUBufferUsage;
+// GPUBufferUsage, read on first use: engines without webgpu (ios 18
+// webviews) don't define it, and touching it while this module loads would
+// throw before the cpu path could take over
+let B: typeof GPUBufferUsage;
 
 // "#rrggbb" -> [r, g, b] in 0..1
 function hex(c: string): [number, number, number] {
@@ -129,6 +132,7 @@ export class GpuPhysics {
 		width: number,
 		height: number,
 	) {
+		B = GPUBufferUsage;
 		this.lineCap = w.gpuLineCap();
 		this.maxShapes = w.gpuMaxShapes();
 		this.canvas = document.createElement("canvas");
