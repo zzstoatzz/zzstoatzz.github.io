@@ -1,5 +1,18 @@
 import { useEffect, useRef } from 'react';
 
+// a page cached from before a deploy asks for a bundle the deploy removed;
+// one reload gets the current page. the flag stops a loop when the bundle
+// fails for any other reason.
+function reloadOnce() {
+    try {
+        if (sessionStorage.getItem('particlesReloaded')) return;
+        sessionStorage.setItem('particlesReloaded', '1');
+    } catch {
+        return;
+    }
+    window.location.reload();
+}
+
 export function ParticlesContainer() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -17,7 +30,7 @@ export function ParticlesContainer() {
                 c.height = window.innerHeight;
             }
             initParticles(canvas, overlay);
-        });
+        }).catch(reloadOnce);
         // navigation swaps <body>; carry the particle UI over to the new one
         const carryUI = (e: Event) => {
             const { newDocument } = e as Event & { newDocument: Document };
