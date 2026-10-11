@@ -35,6 +35,27 @@ const showFooter = path !== '/about';
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="icon" href="/assets/images/stoat.png" />
         <link rel="apple-touch-icon" href="/assets/images/stoat-180.png" />
+        <script is:inline define:vars={{ isHome }}>
+            // startup errors, kept from the first byte so a homepage that comes
+            // up blank can say why: some browsers (firefox focus on ios) have
+            // no console to look in
+            window.__bootErrors = [];
+            const keep = (msg) => window.__bootErrors.push(String(msg).slice(0, 300));
+            addEventListener('error', (e) => {
+                const t = e.target;
+                keep(t && t !== window ? `failed to load ${t.src || t.href}` : e.message);
+            }, true);
+            addEventListener('unhandledrejection', (e) => keep(e.reason && (e.reason.message || e.reason)));
+            if (isHome) {
+                setTimeout(() => {
+                    if (window.particleSystem) return;
+                    const el = document.createElement('pre');
+                    el.style.cssText = 'position:fixed;left:12px;right:12px;top:30%;z-index:10001;margin:0;white-space:pre-wrap;word-break:break-word;font:11px/1.5 monospace;color:rgba(255,255,255,0.55);';
+                    el.textContent = ['particles did not start', ...window.__bootErrors, navigator.userAgent].join('\n');
+                    document.body.appendChild(el);
+                }, 8000);
+            }
+        </script>
         <ClientRouter />
         <script is:inline async src="https://www.googletagmanager.com/gtag/js?id=G-SLML4CSJ70"></script>
         <script is:inline>

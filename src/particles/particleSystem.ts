@@ -20,6 +20,10 @@ import type { Connections } from "./wasmPhysics";
 import { NO_CONNECTIONS, WasmPhysics } from "./wasmPhysics";
 import type { WebGLParticleRenderer } from "./webglRenderer";
 
+// how long the gpu gets to come up (adapter, device, pipelines) before the
+// cpu path stops waiting for it
+const GPU_TIMEOUT_MS = 5000;
+
 export class ParticleSystem {
 	canvas: HTMLCanvasElement;
 	store = new ParticleStore();
@@ -90,7 +94,12 @@ export class ParticleSystem {
 
 		// first visit to the homepage: walk through the settings
 		this.tour = new Tour(this);
-		if (window.location.pathname === "/" && !seenTour()) this.tour.start();
+		try {
+			if (window.location.pathname === "/" && !seenTour()) this.tour.start();
+		} catch (e) {
+			// the particles still run without the tour
+			console.warn("tour failed to start:", e);
+		}
 
 		window.addEventListener("resize", () => this.resizeCanvas());
 		this.resizeCanvas();
@@ -124,28 +133,40 @@ export class ParticleSystem {
 	private async initGpu(wasm: WasmPhysics) {
 		// ?gpu=0 forces the cpu path, for comparing the two
 		if (new URLSearchParams(window.location.search).get("gpu") === "0") return false;
+		let gpu: GpuPhysics | null = null;
 		try {
-			const gpu = await GpuPhysics.create(wasm.w, this.canvas.width, this.canvas.height);
-			if (!gpu) return false;
+			// some webviews offer navigator.gpu but never answer for an
+			// adapter or device; the cpu path doesn't wait on them
+			const pending = GpuPhysics.create(wasm.w, this.canvas.width, this.canvas.height);
+			gpu = await Promise.race([pending, new Promise<null>((r) => setTimeout(() => r(null), GPU_TIMEOUT_MS))]);
+			if (!gpu) {
+				pending.then((late) => late?.dispose(), () => {});
+				return false;
+			}
 			this.mountLayer(gpu.canvas, "particle-webgpu");
 			// the gpu takes the particles from their current state
 			gpu.sync(this.store);
-			gpu.onLost = () => {
-				// positions stay where the gpu last left the store: the cpu
-				// path picks up from the spawn state
-				this.gpu?.canvas.remove();
-				this.gpu = null;
-				this.wake();
-				this.initWebGL();
-			};
+			gpu.onLost = () => this.dropGpu();
 			this.gpu = gpu;
 			this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 			console.log("webgpu physics initialized");
 			return true;
 		} catch (e) {
 			console.warn("webgpu not available, using wasm physics:", e);
+			gpu?.dispose();
 			return false;
 		}
+	}
+
+	// Leave the gpu path for the cpu one. Positions stay where the gpu last
+	// left the store: the cpu path picks up from the spawn state.
+	private dropGpu() {
+		const gpu = this.gpu;
+		if (!gpu) return;
+		this.gpu = null;
+		gpu.dispose();
+		this.wake();
+		this.initWebGL();
 	}
 
 	// Put a renderer's canvas under the overlay (which draws on top).
@@ -477,9 +498,16 @@ export class ParticleSystem {
 		let drewEffects: boolean;
 		if (this.gpu && this.wasmPhysics) {
 			// --- WebGPU path: zig packs the frame, the gpu steps and draws ---
-			this.wasmPhysics.configure(this);
-			this.gpu.frame(deltaTime, this.store, this.settings);
-			this.resting = this.gpu.resting;
+			try {
+				this.wasmPhysics.configure(this);
+				this.gpu.frame(deltaTime, this.store, this.settings);
+				this.resting = this.gpu.resting;
+			} catch (e) {
+				console.warn("webgpu frame failed, using wasm physics:", e);
+				// this frame schedules the next one, so wake() mustn't
+				this.resting = false;
+				this.dropGpu();
+			}
 			drewEffects = this.drawOverlay(timestamp);
 		} else if (this.webglRenderer) {
 			// --- WebGL path ---
