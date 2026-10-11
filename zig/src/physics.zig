@@ -301,8 +301,13 @@ inline fn sweep(p: *Physics, ctx: *const PairCtx, a: u32, lo: u32, hi: u32) void
         const dist = @sqrt(d2);
         if (ctx.has_attraction) {
             const mb: V = g.mass[b..][0..lanes].*;
-            const sd = @max(dist, min_dist);
-            const t = std.math.clamp((rr - dist) * inv_band, zero, one);
+            // min/max as selects: @min/@max carry NaN rules that wasm simd
+            // has no instruction for, so they lower to a per-lane sequence
+            // that cost more than the rest of the pair. no lane that counts
+            // is NaN here.
+            const sd = @select(K, dist > min_dist, dist, min_dist);
+            const u = (rr - dist) * inv_band;
+            const t = @select(K, u < one, @select(K, u > zero, u, zero), one);
             const taper = t * t * (three - two * t);
             const k = @select(K, valid, force_scale * taper / (sd * sd * dist), zero);
             const kx = k * dx;
@@ -514,11 +519,11 @@ fn wallForce(p: *Physics) void {
     const r = s.interaction_radius;
     if (!(s.attract <= -1e-6) or r <= 0) return;
     const ctx: WallCtx = .{
-        .r = r,
-        .r2 = r * r,
-        .inv_band = 1 / (taper_band * r),
-        .fs = s.attract * p.dt,
-        .min_dist = s.smoothing_factor * r,
+        .r = @splat(@floatCast(r)),
+        .r2 = @splat(@floatCast(r * r)),
+        .inv_band = @splat(@floatCast(1 / (taper_band * r))),
+        .fs = @splat(@floatCast(s.attract * p.dt)),
+        .min_dist = @splat(@floatCast(s.smoothing_factor * r)),
     };
     const w = s.width;
     const h = s.height;
@@ -527,8 +532,13 @@ fn wallForce(p: *Physics) void {
     // wall, so only the cells that far in hold sources
     const edge_cells = p.reach + 1;
     // pairs() left f32 copies of the columns in cell order (scratch), which
-    // read far better than the columns through `sorted`
+    // read far better than the columns through `sorted`, and are padded so a
+    // sweep may read `lanes` past its end
     const g = &p.scratch;
+    const lane_idx: @Vector(lanes, u32) = std.simd.iota(u32, lanes);
+    // the mirror of o across a wall at 0 or at `size` is -o or 2·size - o
+    const wx: V = @splat(@floatCast(2 * w));
+    const wy: V = @splat(@floatCast(2 * h));
     for (0..p.n) |i| {
         const x = p.x[i];
         const y = p.y[i];
@@ -550,44 +560,55 @@ fn wallForce(p: *Physics) void {
         } else if (ny and !nx) {
             if (nt) y1 = @min(y1, edge_cells - 1) else y0 = @max(y0, p.gh -| edge_cells);
         }
-        var f: [2]f64 = .{ 0, 0 };
+        const px: V = @splat(@floatCast(x));
+        const py: V = @splat(@floatCast(y));
+        var fx: V = @splat(0);
+        var fy: V = @splat(0);
         for (y0..y1 + 1) |row| {
             const c: u32 = @intCast(row * p.gw);
-            for (p.cell_start[c + x0]..p.cell_start[c + x1 + 1]) |k| {
-                const ox: f64 = g.x[k];
-                const oy: f64 = g.y[k];
-                const m: f64 = g.mass[k];
-                const mx = if (nl) -ox else 2 * w - ox;
-                const my = if (nt) -oy else 2 * h - oy;
-                if (nx) ctx.add(&f, x, y, mx, oy, m);
-                if (ny) ctx.add(&f, x, y, ox, my, m);
-                if (nx and ny) ctx.add(&f, x, y, mx, my, m);
+            const hi: u32 = p.cell_start[c + x1 + 1];
+            var k: u32 = p.cell_start[c + x0];
+            while (k < hi) : (k += lanes) {
+                const live = lane_idx < @as(@Vector(lanes, u32), @splat(hi - k));
+                const ox: V = g.x[k..][0..lanes].*;
+                const oy: V = g.y[k..][0..lanes].*;
+                const m: V = g.mass[k..][0..lanes].*;
+                const mx = if (nl) -ox else wx - ox;
+                const my = if (nt) -oy else wy - oy;
+                if (nx) ctx.add(&fx, &fy, live, mx - px, oy - py, m);
+                if (ny) ctx.add(&fx, &fy, live, ox - px, my - py, m);
+                if (nx and ny) ctx.add(&fx, &fy, live, mx - px, my - py, m);
             }
         }
-        p.vx[i] += f[0];
-        p.vy[i] += f[1];
+        p.vx[i] += @reduce(.Add, fx);
+        p.vy[i] += @reduce(.Add, fy);
     }
 }
 
 const WallCtx = struct {
-    r: f64,
-    r2: f64,
-    inv_band: f64,
-    fs: f64,
-    min_dist: f64,
+    r: V,
+    r2: V,
+    inv_band: V,
+    fs: V,
+    min_dist: V,
 
-    /// the pair force on (x, y) from a mirror image of mass m at (ix, iy)
-    inline fn add(c: WallCtx, f: *[2]f64, x: f64, y: f64, ix: f64, iy: f64, m: f64) void {
-        const dx = ix - x;
-        const dy = iy - y;
+    /// the pair force from mirror images of mass m at offsets (dx, dy),
+    /// `lanes` at a time, into (fx, fy). min/max are selects, as in sweep.
+    inline fn add(c: WallCtx, fx: *V, fy: *V, live: @Vector(lanes, bool), dx: V, dy: V, m: V) void {
+        const zero: V = @splat(0);
+        const one: V = @splat(1);
         const d2 = dx * dx + dy * dy;
-        if (!(d2 < c.r2) or d2 < 1e-6) return;
+        const near = @select(bool, d2 < c.r2, d2 >= @as(V, @splat(1e-6)), d2 < c.r2);
+        const valid = @select(bool, live, near, live);
+        if (!@reduce(.Or, valid)) return;
         const dist = @sqrt(d2);
-        const sd = @max(dist, c.min_dist);
-        const t = std.math.clamp((c.r - dist) * c.inv_band, 0, 1);
-        const k = c.fs * m * t * t * (3 - 2 * t) / (sd * sd * dist);
-        f[0] += k * dx;
-        f[1] += k * dy;
+        const sd = @select(K, dist > c.min_dist, dist, c.min_dist);
+        const u = (c.r - dist) * c.inv_band;
+        const t = @select(K, u < one, @select(K, u > zero, u, zero), one);
+        const k = @select(K, valid, c.fs * m * t * t * (@as(V, @splat(3)) - @as(V, @splat(2)) * t) / (sd * sd * dist), zero);
+        // masked lanes: k is 0 but dx may be inf or NaN there
+        fx.* += @select(K, valid, k * dx, zero);
+        fy.* += @select(K, valid, k * dy, zero);
     }
 };
 
