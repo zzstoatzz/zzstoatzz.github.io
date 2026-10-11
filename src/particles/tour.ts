@@ -37,7 +37,7 @@ const STEPS: Step[] = [
 			{ name: "samus", desc: "a charge shot: hold to charge, let go to fire", set: { EXPLOSION_FORCE: 2, EXPLOSION_RADIUS: 250, ENABLE_VORTEX_FORCE: true },
 				hint: "try it: <b>hold for a few seconds</b>, then let go. longer hold, bigger boom" },
 		],
-		dial: { key: "EXPLOSION_FORCE", name: "push strength", ends: ["soft", "huge"] },
+		dial: { key: "EXPLOSION_FORCE", name: "explosion force", ends: ["soft", "huge"] },
 	},
 	{
 		q: "how many?",
@@ -47,7 +47,7 @@ const STEPS: Step[] = [
 			{ name: "a bunch", desc: "700, the usual crowd", set: { PARTICLE_COUNT: 700, AVERAGE_PARTICLE_SIZE: 2.5 }, hint: "the default" },
 			{ name: "a swarm", desc: "3,000 small ones, like dust", set: { PARTICLE_COUNT: 3000, AVERAGE_PARTICLE_SIZE: 1.3 }, hint: "stir it and it moves like smoke" },
 		],
-		dial: { key: "PARTICLE_COUNT", name: "how many" },
+		dial: { key: "PARTICLE_COUNT", name: "particle count" },
 	},
 	{
 		q: "how do they get along?",
@@ -60,7 +60,7 @@ const STEPS: Step[] = [
 			{ name: "ignore", desc: "no pull, no push. they pass through like ghosts", set: { ATTRACT: 0, SMOOTHING_FACTOR: 0.13 },
 				hint: "push them into a corner and they stay piled" },
 		],
-		dial: { key: "ATTRACT", name: "apart or together", ends: ["apart", "together"] },
+		dial: { key: "ATTRACT", name: "attract", ends: ["apart", "together"] },
 	},
 	{
 		q: "what's the world like?",
@@ -76,24 +76,13 @@ const STEPS: Step[] = [
 		dial: { key: "GRAVITY", name: "gravity", ends: ["falls up", "falls down"] },
 	},
 	{
-		q: "lines between neighbors?",
-		where: "connections",
-		choices: [
-			{ name: "none", desc: "just the dots", set: { CONNECTION_OPACITY: 0 }, hint: "clean" },
-			{ name: "faint", desc: "a light web between close ones", set: { CONNECTION_OPACITY: 0.05, INTERACTION_RADIUS: 60 }, hint: "the default" },
-			{ name: "web", desc: "bright lines that reach further", set: { CONNECTION_OPACITY: 0.2, INTERACTION_RADIUS: 100 },
-				hint: "best with clump up" },
-		],
-		dial: { key: "CONNECTION_OPACITY", name: "line brightness", ends: ["off", "bright"] },
-	},
-	{
 		q: "what colors?",
 		where: "color",
 		choices: [
 			{ name: "mixed", desc: "eight colors, shuffled", set: { PARTICLE_SINGLE_COLOR: false }, hint: "the default" },
 			{ name: "one color", desc: "all the same, you pick which", set: { PARTICLE_SINGLE_COLOR: true }, hint: "pick it below" },
 		],
-		dial: { key: "PARTICLE_COLOR", name: "color" },
+		dial: { key: "PARTICLE_COLOR", name: "particle color" },
 	},
 ];
 

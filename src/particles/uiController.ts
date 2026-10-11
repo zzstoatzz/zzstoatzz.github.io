@@ -6,25 +6,6 @@ import { RANGES } from "./config";
 import type { ParticleSystem } from "./particleSystem";
 import { mountOnBody } from "./dom";
 
-// what the panel calls each setting, in plain words
-const LABELS: Partial<Record<SettingKey, string>> = {
-	PARTICLE_COUNT: "how many",
-	AVERAGE_PARTICLE_SIZE: "size",
-	DRAG: "air thickness",
-	ELASTICITY: "bounciness",
-	ATTRACT: "apart ↔ together",
-	SMOOTHING_FACTOR: "personal space",
-	EXPLOSION_RADIUS: "push reach",
-	EXPLOSION_FORCE: "push strength",
-	ENABLE_VORTEX_FORCE: "samus charge shot",
-	INTERACTION_RADIUS: "line reach",
-	CONNECTION_OPACITY: "line brightness",
-	CONNECTION_WIDTH: "line thickness",
-	CONNECTION_COLOR: "line color",
-	PARTICLE_SINGLE_COLOR: "one color",
-	PARTICLE_COLOR: "particle color",
-};
-
 type SettingChange = <K extends SettingKey>(key: K, value: Settings[K]) => void;
 
 export class UIController {
@@ -119,7 +100,8 @@ export class UIController {
 				const range = RANGES[key];
 				if (!range) continue;
 				
-				const labelText = LABELS[key] ?? key.toLowerCase().replace(/_/g, ' ');
+				// Generate label based on key with better formatting
+				const labelText = key.toLowerCase().replace(/_/g, ' ');
 				
 				if (key === 'CONNECTION_COLOR' || key === 'PARTICLE_COLOR') {
 					html += `
@@ -132,8 +114,8 @@ export class UIController {
 						</div>
 					`;
 				} else if (key === 'ENABLE_VORTEX_FORCE' || key === 'PARTICLE_SINGLE_COLOR') {
-					const label = labelText;
-					const note = key === 'PARTICLE_SINGLE_COLOR' ? 'same for all' : 'hold, let go';
+					const label = key === 'PARTICLE_SINGLE_COLOR' ? 'one color' : labelText;
+					const note = key === 'PARTICLE_SINGLE_COLOR' ? 'same for all' : 'special mouse force';
 					html += `
 						<div class="control-group">
 							<label for="${key}">${label}</label>
