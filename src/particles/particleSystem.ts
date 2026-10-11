@@ -10,6 +10,7 @@ import { spawnParticle, applyParticleSettings, randomColor } from "./particle";
 import { ParticleStore } from "./particleStore";
 import { SettingsManager } from "./settingsManager";
 import { UIController } from "./uiController";
+import { Tour } from "./tour";
 import { CanvasRenderer } from "./canvasRenderer";
 import { MouseEffects } from "./mouseEffects";
 import { ShapeField } from "./shapes";
@@ -44,6 +45,7 @@ export class ParticleSystem {
 	settingsManager: SettingsManager;
 	shapeEditor: ShapeEditor;
 	uiController: UIController;
+	tour: Tour;
 	private wasmPhysics: WasmPhysics | null = null;
 	// the WebGPU path, null until it loads (or for good without WebGPU)
 	gpu: GpuPhysics | null = null;
@@ -85,6 +87,10 @@ export class ParticleSystem {
 		);
 
 		this.shapeEditor.onDeactivate = () => this.uiController.setShapeModeActive(false);
+
+		// first visit to the homepage: walk through the settings
+		this.tour = new Tour(this);
+		if (window.location.pathname === "/" && !seenTour()) this.tour.start();
 
 		window.addEventListener("resize", () => this.resizeCanvas());
 		this.resizeCanvas();
@@ -553,4 +559,14 @@ function context2d(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
 	const ctx = canvas.getContext("2d");
 	if (!ctx) throw new Error("canvas 2d context unavailable");
 	return ctx;
+}
+
+// localStorage throws in sandboxed iframes (e.g. leaflet.pub embeds); treat
+// that as seen
+function seenTour() {
+	try {
+		return !!localStorage.getItem("zenInstructionsSeen");
+	} catch {
+		return true;
+	}
 }

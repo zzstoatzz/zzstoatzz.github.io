@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import FirstVisitModal from './FirstVisitModal';
+import { useEffect } from 'react';
 
 // true when a one-finger drag on el should keep its default: inside a form
 // control (sliders) or an element that can scroll on its own
@@ -13,23 +12,6 @@ function inScrollable(el: EventTarget | null): boolean {
 }
 
 export default function Home() {
-    const [showModal, setShowModal] = useState(false);
-    const [isInitialized, setIsInitialized] = useState(false);
-
-    useEffect(() => {
-        // localStorage throws in sandboxed iframes (e.g. leaflet.pub embeds)
-        let hasSeenInstructions = 'true';
-        try {
-            hasSeenInstructions = localStorage.getItem('zenInstructionsSeen') ?? '';
-        } catch {
-            // sandboxed iframe: treat as already-seen
-        }
-        if (!hasSeenInstructions) {
-            setShowModal(true);
-        }
-        setIsInitialized(true);
-    }, []);
-
     // The homepage is one fixed screen: no page scroll, no rubber-banding, no
     // pinch zoom. iOS Safari ignores user-scalable=no, hence the gesture and
     // multi-touch handlers.
@@ -57,22 +39,7 @@ export default function Home() {
         };
     }, []);
 
-    const handleDismiss = () => {
-        setShowModal(false);
-        try {
-            localStorage.setItem('zenInstructionsSeen', 'true');
-        } catch {
-            // sandboxed iframe: nothing to persist
-        }
-    };
-
-    if (!isInitialized) {
-        return null;
-    }
-
     return (
-        <main className="h-full relative">
-            {showModal && <FirstVisitModal onDismiss={handleDismiss} />}
-        </main>
+        <main className="h-full relative" />
     );
 }
