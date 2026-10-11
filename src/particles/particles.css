@@ -532,7 +532,8 @@
     background: rgba(0, 0, 0, 0.5);
     padding: 8px 12px;
     border-radius: 6px;
-    z-index: 10000;
+    /* over the particles, under the tour card (900) and the panel */
+    z-index: 800;
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.05);
     transition: all 0.3s ease;

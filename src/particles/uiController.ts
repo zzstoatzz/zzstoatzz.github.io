@@ -16,7 +16,7 @@ const LABELS: Partial<Record<SettingKey, string>> = {
 	SMOOTHING_FACTOR: "personal space",
 	EXPLOSION_RADIUS: "push reach",
 	EXPLOSION_FORCE: "push strength",
-	ENABLE_VORTEX_FORCE: "charge & boom",
+	ENABLE_VORTEX_FORCE: "samus charge shot",
 	INTERACTION_RADIUS: "line reach",
 	CONNECTION_OPACITY: "line brightness",
 	CONNECTION_WIDTH: "line thickness",
