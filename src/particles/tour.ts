@@ -34,10 +34,10 @@ const STEPS: Step[] = [
 				hint: "try it: <b>press and hold</b> on the particles" },
 			{ name: "shove", desc: "a hard push that clears a hole fast", set: { EXPLOSION_FORCE: 2.5, EXPLOSION_RADIUS: 300, ENABLE_VORTEX_FORCE: false },
 				hint: "try it: <b>press and drag</b> through them" },
-			{ name: "samus", desc: "a charge shot: hold to charge, let go to fire", set: { EXPLOSION_FORCE: 2, EXPLOSION_RADIUS: 250, ENABLE_VORTEX_FORCE: true },
+			{ name: "samus touch", desc: "a charge shot: hold to charge, let go to fire", set: { EXPLOSION_FORCE: 2, EXPLOSION_RADIUS: 250, ENABLE_VORTEX_FORCE: true },
 				hint: "try it: <b>hold for a few seconds</b>, then let go. longer hold, bigger boom" },
 		],
-		dial: { key: "EXPLOSION_FORCE", name: "explosion force", ends: ["soft", "huge"] },
+		dial: { key: "EXPLOSION_FORCE", name: "touch force", ends: ["soft", "huge"] },
 	},
 	{
 		q: "how many?",

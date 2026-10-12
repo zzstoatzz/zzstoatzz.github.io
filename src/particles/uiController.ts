@@ -6,6 +6,14 @@ import { RANGES } from "./config";
 import type { ParticleSystem } from "./particleSystem";
 import { mountOnBody } from "./dom";
 
+// the few settings whose key names read badly; the rest use the key itself
+const LABELS: Partial<Record<SettingKey, string>> = {
+	EXPLOSION_FORCE: "touch force",
+	EXPLOSION_RADIUS: "touch radius",
+	SMOOTHING_FACTOR: "softening",
+	ENABLE_VORTEX_FORCE: "samus touch",
+};
+
 type SettingChange = <K extends SettingKey>(key: K, value: Settings[K]) => void;
 
 export class UIController {
@@ -100,8 +108,7 @@ export class UIController {
 				const range = RANGES[key];
 				if (!range) continue;
 				
-				// Generate label based on key with better formatting
-				const labelText = key.toLowerCase().replace(/_/g, ' ');
+				const labelText = LABELS[key] ?? key.toLowerCase().replace(/_/g, ' ');
 				
 				if (key === 'CONNECTION_COLOR' || key === 'PARTICLE_COLOR') {
 					html += `
@@ -115,7 +122,7 @@ export class UIController {
 					`;
 				} else if (key === 'ENABLE_VORTEX_FORCE' || key === 'PARTICLE_SINGLE_COLOR') {
 					const label = key === 'PARTICLE_SINGLE_COLOR' ? 'one color' : labelText;
-					const note = key === 'PARTICLE_SINGLE_COLOR' ? 'same for all' : 'special mouse force';
+					const note = key === 'PARTICLE_SINGLE_COLOR' ? 'same for all' : 'hold to charge, let go';
 					html += `
 						<div class="control-group">
 							<label for="${key}">${label}</label>
