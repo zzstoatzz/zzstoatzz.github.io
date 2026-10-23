@@ -1,17 +1,18 @@
-// The link preview, dist/og.png: a long exposure of the homepage. The same
-// physics.wasm the browser runs steps a crowd through a held samus touch,
-// each particle's last stretch of frames is drawn as a fading streak (the
-// motion a still frame can't show), and the last frame goes on top, drawn the
-// way the renderers draw it (webglRenderer.ts, gpu/render.wgsl). The
-// connection lines are left out: at card size they're invisible and were most
-// of the file. The crowd and the hold are seeded by the commit, so each
-// deploy unfurls with its own.
+// The link preview, dist/og.png: species mode, settled into creatures, run
+// by the same physics.wasm the browser runs and drawn the way its renderers
+// draw (webglRenderer.ts, gpu/render.wgsl).
+//
+// A card shows this about 500 px wide, so the frame is laid out at three
+// times css px: a phone's density of particles, big enough to read. The
+// crowd lives in a world a little larger than the frame, which is cropped
+// from its middle so the walls (and the particles pressed against them)
+// stay out of the picture. The species table and the crowd were picked by
+// eye; wasm floats are deterministic, so every build renders the same frame.
 //
 //   bun scripts/og.ts [out.png]
-import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
-import { DEFAULT_SETTINGS, hexToRgb } from "../src/particles/config";
+import { COLOR_MODES, DEFAULT_SETTINGS, hexToRgb } from "../src/particles/config";
 import type { Rgb, Settings } from "../src/particles/config";
 import { spawnParticle } from "../src/particles/particle";
 import { ParticleStore } from "../src/particles/particleStore";
@@ -19,19 +20,25 @@ import { WasmPhysics } from "../src/particles/wasmPhysics";
 
 const WIDTH = 1200;
 const HEIGHT = 630;
-// the frame is laid out in css px at this pixel ratio, like a phone's screen
-const DPR = 2;
-const COUNT = 900;
-const BACKGROUND = hexToRgb("#070610"); // BackgroundContext's default
+const DPR = 3;
+const WORLD = 1.15;
+// particles per css px², a phone's crowd of the saved look this is drawn from
+const DENSITY = 1800 / ((WIDTH / DPR) * (HEIGHT / DPR));
+// the species table (Physics.seedSpecies) and the crowd (spawn order)
+const TABLE = 8;
+const CROWD = 3;
+const SETTLE_FRAMES = 1518;
 const FRAME_MS = 1000 / 60;
-const SETTLE_FRAMES = 240;
-const HOLD_SECONDS = 2.2;
-// the shutter: frames of trail behind each particle
-const EXPOSURE_FRAMES = 30;
+const BACKGROUND = hexToRgb("#070610"); // BackgroundContext's default
+
+const settings: Settings = {
+	...DEFAULT_SETTINGS,
+	AVERAGE_PARTICLE_SIZE: 1.1,
+	DRAG: 0.17,
+	COLOR_MODE: "species",
+};
 
 const out = process.argv[2] ?? "dist/og.png";
-const commit = process.env.GITHUB_SHA ?? execSync("git rev-parse HEAD").toString().trim();
-const seed = Number.parseInt(commit.slice(0, 8), 16) >>> 0;
 
 // mulberry32: the spawn draws from Math.random, so seeding it seeds the crowd
 function seeded(s: number) {
@@ -43,99 +50,59 @@ function seeded(s: number) {
 		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 	};
 }
-const random = seeded(seed);
-Math.random = random;
+Math.random = seeded(CROWD);
 
-const w = WIDTH / DPR;
-const h = HEIGHT / DPR;
-const settings: Settings = { ...DEFAULT_SETTINGS, PARTICLE_COUNT: COUNT, ENABLE_VORTEX_FORCE: true };
+// the frame and the world around it, in css px
+const fw = WIDTH / DPR;
+const fh = HEIGHT / DPR;
+const w = fw * WORLD;
+const h = fh * WORLD;
+const count = Math.floor(DENSITY * w * h);
 
 const { w: physics } = await WasmPhysics.fromBytes(
 	readFileSync(new URL("../src/particles/physics.wasm", import.meta.url)),
 );
-physics.seed(seed);
+physics.seed(CROWD);
+physics.seedSpecies(TABLE);
 const store = new ParticleStore();
 store.attach(physics);
-store.resize(COUNT);
-for (let i = 0; i < COUNT; i++) spawnParticle(store, i, random() * w, random() * h, settings);
+store.resize(count);
+for (let i = 0; i < count; i++) spawnParticle(store, i, Math.random() * w, Math.random() * h, settings);
 
-// a held samus touch, as wasmPhysics.ts mouseParams works one out
-interface Hold {
-	x: number;
-	y: number;
-	radius: number;
-	intensity: number;
-	speed: number;
-}
-
-function step(hold: Hold | null) {
-	const s = settings;
-	// no connection lines (none are drawn), color mode off
-	physics.setSettings(s.INTERACTION_RADIUS, s.ATTRACT, s.SMOOTHING_FACTOR, s.CONNECTION_OPACITY, s.GRAVITY, s.DRAG, s.ELASTICITY, w, h, false, 0, 0, 0);
-	// (active, x, y, radius, force, vortex, down, spinning, intensity, speed, paint)
-	if (hold) physics.setMouse(true, hold.x, hold.y, hold.radius, s.EXPLOSION_FORCE, true, true, true, hold.intensity, hold.speed, 0);
-	else physics.setMouse(false, 0, 0, 0, 0, true, false, false, 0, 1, 0);
-	physics.step(FRAME_MS);
-	store.sync();
-}
-
-for (let f = 0; f < SETTLE_FRAMES; f++) step(null);
-
-// held off-center, and caught mid-spin
-const mx = w * (0.35 + random() * 0.3);
-const my = h * (0.4 + random() * 0.2);
-const reach = Math.min(w, h) * 0.45;
-const frames = Math.round((HOLD_SECONDS * 1000) / FRAME_MS);
-const trail: { x: Float64Array; y: Float64Array }[] = [];
-for (let f = 0; f < frames; f++) {
-	const held = (f * FRAME_MS) / 1000;
-	const intensity = Math.min(1, Math.log(held + 1) / Math.log(10));
-	step({ x: mx, y: my, radius: reach * (1 + intensity * intensity), intensity, speed: 1 + held * 0.5 });
-	if (f >= frames - EXPOSURE_FRAMES) trail.push({ x: store.x.slice(), y: store.y.slice() });
-}
+const s = settings;
+// no connection lines (none are drawn)
+physics.setSettings(
+	s.INTERACTION_RADIUS, s.ATTRACT, s.SMOOTHING_FACTOR, s.CONNECTION_OPACITY, s.GRAVITY, s.DRAG, s.ELASTICITY,
+	w, h, false, COLOR_MODES.indexOf(s.COLOR_MODE), s.SPECIES_FORCE, s.DYE_SPREAD,
+);
+// (active, x, y, radius, force, vortex, down, spinning, intensity, speed, paint): nobody touching
+physics.setMouse(false, 0, 0, 0, 0, false, false, false, 0, 1, 0);
+for (let f = 0; f < SETTLE_FRAMES; f++) physics.step(FRAME_MS);
+store.sync();
 
 // --- drawing: float rgb, blended as the canvas blends, rounded to 8 bits
+
 const px = new Float32Array(WIDTH * HEIGHT * 3);
 for (let i = 0; i < WIDTH * HEIGHT; i++) px.set(BACKGROUND, i * 3);
 
-function blend(ix: number, iy: number, c: Rgb, a: number, additive: boolean) {
+function blend(ix: number, iy: number, c: Rgb, a: number) {
 	if (ix < 0 || iy < 0 || ix >= WIDTH || iy >= HEIGHT || a <= 0) return;
 	const o = (iy * WIDTH + ix) * 3;
-	for (let k = 0; k < 3; k++) px[o + k] = additive ? px[o + k] + c[k] * a : px[o + k] * (1 - a) + c[k] * a;
+	for (let k = 0; k < 3; k++) px[o + k] = px[o + k] * (1 - a) + c[k] * a;
 }
 
-// an additive 1px antialiased segment, sampled every half pixel
-function segment(ax: number, ay: number, bx: number, by: number, c: Rgb, a: number) {
-	const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) * 2));
-	for (let k = 0; k <= steps; k++) {
-		const u = k / steps;
-		const sx = ax + (bx - ax) * u;
-		const sy = ay + (by - ay) * u;
-		const fx = Math.floor(sx);
-		const fy = Math.floor(sy);
-		const gx = sx - fx;
-		const gy = sy - fy;
-		blend(fx, fy, c, a * (1 - gx) * (1 - gy), true);
-		blend(fx + 1, fy, c, a * gx * (1 - gy), true);
-		blend(fx, fy + 1, c, a * (1 - gx) * gy, true);
-		blend(fx + 1, fy + 1, c, a * gx * gy, true);
-	}
+function smoothstep(e0: number, e1: number, v: number) {
+	const t = Math.min(1, Math.max(0, (v - e0) / (e1 - e0)));
+	return t * t * (3 - 2 * t);
 }
 
-// trails: each particle's path over the exposure, in its own color, fading
-// in from the oldest frame
-for (let f = 1; f < trail.length; f++) {
-	const [from, to] = [trail[f - 1], trail[f]];
-	const a = 0.35 * (f / trail.length) ** 2;
-	for (let i = 0; i < store.count; i++) {
-		segment(from.x[i] * DPR, from.y[i] * DPR, to.x[i] * DPR, to.y[i] * DPR, store.palette[store.color[i]], a);
-	}
-}
-
-// discs: the bubble shader, sampled 4x4 per pixel
+// discs: the bubble shader, sampled 4x4 per pixel, in the frame cropped from
+// the world's middle
+const ox = (w - fw) / 2;
+const oy = (h - fh) / 2;
 for (let i = 0; i < store.count; i++) {
-	const cx = store.x[i] * DPR;
-	const cy = store.y[i] * DPR;
+	const cx = (store.x[i] - ox) * DPR;
+	const cy = (store.y[i] - oy) * DPR;
 	const r = store.radius[i] * DPR;
 	const c = store.palette[store.color[i]];
 	for (let iy = Math.floor(cy - r); iy <= Math.ceil(cy + r); iy++) {
@@ -152,18 +119,13 @@ for (let i = 0; i < store.count; i++) {
 			}
 			if (a === 0) continue;
 			const l = lift / 16;
-			blend(ix, iy, [c[0] + l, c[1] + l, c[2] + l], a / 16, false);
+			blend(ix, iy, [c[0] + l, c[1] + l, c[2] + l], a / 16);
 		}
 	}
 }
 
-function smoothstep(e0: number, e1: number, v: number) {
-	const t = Math.min(1, Math.max(0, (v - e0) / (e1 - e0)));
-	return t * t * (3 - 2 * t);
-}
-
 writeFileSync(out, png(px));
-console.log(`og: ${out} (${WIDTH}x${HEIGHT}, commit ${commit.slice(0, 7)})`);
+console.log(`og: ${out} (${WIDTH}x${HEIGHT}, ${count} particles)`);
 
 // --- a minimal png: 8-bit rgb, unfiltered (the antialiasing noise defeats
 // the row filters), one zlib stream

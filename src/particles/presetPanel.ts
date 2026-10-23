@@ -119,7 +119,7 @@ export class PresetPanel {
 			const show = this.form.hidden;
 			this.form.hidden = !show;
 			open.setAttribute("aria-expanded", String(show));
-			if (show) void this.refreshAccount();
+			if (show) void this.refreshAccount().then(() => this.bringIntoView());
 		});
 		this.form.addEventListener("submit", (e) => {
 			e.preventDefault();
@@ -202,6 +202,13 @@ export class PresetPanel {
 			view,
 		);
 		this.name.value = "";
+	}
+
+	// The form opens at the bottom of a panel that scrolls, often below its
+	// fold: bring it into view and put the cursor where the next step is.
+	private bringIntoView() {
+		this.form.scrollIntoView({ block: "nearest", behavior: "smooth" });
+		(this.signedIn ? this.name : this.handle).focus({ preventScroll: true });
 	}
 
 	// Whether a save can skip signing in, and say who it saves as.
