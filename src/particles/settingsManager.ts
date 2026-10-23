@@ -27,6 +27,12 @@ function parseSetting(key: SettingKey, value: string): Settings[SettingKey] | nu
 	return n;
 }
 
+// Whether a query string sets any particle setting, i.e. it's a shared link.
+export function carriesSettings(search: string): boolean {
+	const params = new URLSearchParams(search);
+	return SETTING_KEYS.some((key) => params.has(key));
+}
+
 // Round floats so links don't carry 0.30000000000000004.
 function formatSetting(value: Settings[SettingKey]): string {
 	return typeof value === "number" ? String(Number.parseFloat(value.toFixed(4))) : String(value);

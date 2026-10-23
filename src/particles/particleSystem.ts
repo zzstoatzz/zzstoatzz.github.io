@@ -9,7 +9,7 @@ import type { Settings } from "./config";
 import { PARTICLE_COLORS, SPECIES_SEEDS } from "./config";
 import { spawnParticle, applyParticleSettings, randomColor } from "./particle";
 import { ParticleStore } from "./particleStore";
-import { SettingsManager } from "./settingsManager";
+import { SettingsManager, carriesSettings } from "./settingsManager";
 import { UIController } from "./uiController";
 import { Tour } from "./tour";
 import { CanvasRenderer } from "./canvasRenderer";
@@ -102,10 +102,12 @@ export class ParticleSystem {
 
 		this.shapeEditor.onDeactivate = () => this.uiController.setShapeModeActive(false);
 
-		// first visit to the homepage: walk through the settings
+		// first visit to the homepage: walk through the settings, unless a
+		// link brought settings of its own to look at
 		this.tour = new Tour(this);
 		try {
-			if (window.location.pathname === "/" && !seenTour()) this.tour.start();
+			const linked = carriesSettings(window.location.search);
+			if (window.location.pathname === "/" && !linked && !seenTour()) this.tour.start();
 		} catch (e) {
 			// the particles still run without the tour
 			console.warn("tour failed to start:", e);
