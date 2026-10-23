@@ -20,7 +20,7 @@ const isHome = path === '/';
 const showFooter = path !== '/about';
 // the link preview, rendered at build by scripts/og.ts; the commit in the
 // query makes unfurlers that cache by url fetch each deploy's frame
-const commit = process.env.GITHUB_SHA?.slice(0, 7);
+const commit = (import.meta.env.GITHUB_SHA as string | undefined)?.slice(0, 7);
 const ogImage = new URL(`/og.png${commit ? `?v=${commit}` : ''}`, Astro.site);
 const pageUrl = new URL(path, Astro.site);
 ---
