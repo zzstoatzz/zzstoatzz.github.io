@@ -10,6 +10,7 @@ import { PARTICLE_COLORS, SPECIES_SEEDS } from "./config";
 import { spawnParticle, applyParticleSettings, randomColor } from "./particle";
 import { ParticleStore } from "./particleStore";
 import { SettingsManager, carriesSettings } from "./settingsManager";
+import { loadPresetFromUrl } from "./presetPanel";
 import { UIController } from "./uiController";
 import { Tour } from "./tour";
 import { CanvasRenderer } from "./canvasRenderer";
@@ -29,6 +30,9 @@ const GPU_TIMEOUT_MS = 5000;
 const REVEAL_WAIT_MS = 1000;
 // and if the physics never arrives, how long until they show standing still
 const REVEAL_GIVE_UP_MS = 4000;
+// how long a ?preset= link's look gets to arrive before the particles fade
+// in on the defaults
+const PRESET_WAIT_MS = 2500;
 
 export class ParticleSystem {
 	canvas: HTMLCanvasElement;
@@ -63,6 +67,9 @@ export class ParticleSystem {
 	private resting = false;
 	// the layers stay transparent until the particles move (particles.css)
 	private revealed = false;
+	private revealing = false;
+	// and until a linked preset has arrived, if there is one
+	private revealGate: Promise<unknown> = Promise.resolve();
 	// dye mode: the color a press paints, the next of the mix on each press
 	paint = PARTICLE_COLORS.length - 1;
 
@@ -118,6 +125,12 @@ export class ParticleSystem {
 
 		this.init();
 
+		this.revealGate = Promise.race([
+			loadPresetFromUrl(this),
+			new Promise((r) => setTimeout(r, PRESET_WAIT_MS)),
+		]);
+		void this.uiController.presets.resumeIfReturning();
+
 		// these load in the background; until then Canvas 2D draws and nothing
 		// moves, behind transparent layers
 		this.initBackends();
@@ -138,11 +151,14 @@ export class ParticleSystem {
 
 	// Fade the particle layers in (particles.css).
 	private reveal() {
-		if (this.revealed) return;
-		this.revealed = true;
-		for (const el of document.querySelectorAll<HTMLElement>("#particle-canvas, #particle-webgl, #particle-webgpu")) {
-			el.dataset.shown = "";
-		}
+		if (this.revealing) return;
+		this.revealing = true;
+		void this.revealGate.then(() => {
+			this.revealed = true;
+			for (const el of document.querySelectorAll<HTMLElement>("#particle-canvas, #particle-webgl, #particle-webgpu")) {
+				el.dataset.shown = "";
+			}
+		});
 	}
 
 	private async initWasmPhysics() {

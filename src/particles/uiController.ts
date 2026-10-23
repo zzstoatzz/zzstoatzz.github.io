@@ -5,6 +5,7 @@ import type { ColorMode, SettingKey, Settings } from "./config";
 import { COLOR_MODES, RANGES, SPECIES_DRAG } from "./config";
 import type { ParticleSystem } from "./particleSystem";
 import { mountOnBody } from "./dom";
+import { PresetPanel } from "./presetPanel";
 
 // the few settings whose key names read badly; the rest use the key itself
 const LABELS: Partial<Record<SettingKey, string>> = {
@@ -32,6 +33,7 @@ type SettingChange = <K extends SettingKey>(key: K, value: Settings[K]) => void;
 export class UIController {
 	private particleControls: HTMLElement | null = null;
 	private settingsIcon: HTMLElement | null = null;
+	readonly presets: PresetPanel;
 
 	constructor(
 		private system: ParticleSystem,
@@ -40,6 +42,8 @@ export class UIController {
 	) {
 		this.initControls();
 		this.bindEvents();
+		this.presets = new PresetPanel(system);
+		this.presets.bind();
 		this.updateUI(initialSettings);
 	}
 
@@ -89,6 +93,7 @@ export class UIController {
 						<button id="generateShareLink" class="button">share</button>
 						<button id="startTour" class="button">tour</button>
 					</div>
+					${PresetPanel.template()}
 				</div>
 			</div>
 		`;

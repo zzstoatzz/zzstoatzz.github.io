@@ -12,6 +12,9 @@ src/particles/            the particle system (typescript) and its compiled phys
 src/styles/globals.css    tailwind and site styles
 src/utils/                pitch detector (tuner)
 public/manifest.webmanifest, public/sw.js   PWA manifest and offline service worker
+public/oauth-client-metadata.json   the atproto OAuth client (saving presets)
+lexicons/                 io.zzstoatzz.physics.preset, the saved-preset record
+scripts/og.ts             the link preview, rendered after the build
 zig/                      the particle physics, compiled to src/particles/*.wasm
 ```
 
@@ -36,6 +39,10 @@ Navigation goes through Astro's client router (`<ClientRouter />`), so pages swa
 At rest the particles freeze: once zig decides the crowd has settled (mean speed under a threshold for a streak, nobody touching), the frame loop stops and the last frame stays on screen, on either path. A pointer, key, resize or settings change wakes it.
 
 The homepage is one fixed screen (`html.home-locked`, set by `components/Home.tsx`): no page scroll or pinch zoom, and layers sized to `100lvh` so they reach under iOS Safari's toolbar.
+
+## Presets
+
+The panel's "save to your pds" writes the current look (every setting, as the share link's query string) as an `io.zzstoatzz.physics.preset` record in the saver's own repo, and `?preset=<at-uri>` loads one back from any repo, no sign-in needed. Saving is the site's only sign-in, so it's progressive: the first save is the OAuth round trip, asking for `atproto repo:io.zzstoatzz.physics.preset?action=create` and nothing more, and the save finishes when the browser comes back (`presetPanel.ts` drives it, `presets.ts` holds the atproto code and loads only when needed). The client metadata's `scope` lists every scope any flow may ask for: a wider grant (deleting presets, say) is a new authorization with a scope already listed there. Local testing needs `127.0.0.1`, not `localhost` (atproto's loopback client).
 
 ## Checks
 

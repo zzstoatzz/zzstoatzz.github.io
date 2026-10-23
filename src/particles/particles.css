@@ -787,3 +787,113 @@
 .particle-tour .tour-buttons { display: flex; gap: 6px; }
 .particle-tour .tour-dots i { display: inline-block; width: 6px; height: 6px; margin: 0 3px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); }
 .particle-tour .tour-dots i.on { background: #64ffda; }
+
+/* save to your pds (presetPanel.ts) */
+.preset-row {
+	margin-top: 10px !important;
+}
+.preset-form {
+	margin-top: 12px !important;
+	display: flex !important;
+	flex-direction: column !important;
+	gap: 8px !important;
+}
+.preset-form[hidden],
+.preset-form [hidden] {
+	display: none !important;
+}
+.preset-form label {
+	font-size: 12px !important;
+	color: rgba(255, 255, 255, 0.7) !important;
+	letter-spacing: 0.5px !important;
+}
+.panel-input {
+	width: 100% !important;
+	box-sizing: border-box !important;
+	background: rgba(255, 255, 255, 0.06) !important;
+	border: 1px solid rgba(100, 255, 218, 0.2) !important;
+	border-radius: 6px !important;
+	color: rgba(255, 255, 255, 0.9) !important;
+	font-family: var(--font-fira-code), monospace !important;
+	/* 16px keeps ios safari from zooming in on focus */
+	font-size: 16px !important;
+	padding: 8px 10px !important;
+	outline: none !important;
+}
+.panel-input:focus {
+	border-color: rgba(100, 255, 218, 0.5) !important;
+}
+.handle-field {
+	position: relative !important;
+	display: flex !important;
+	flex-direction: column !important;
+	gap: 8px !important;
+}
+.handle-list {
+	position: absolute !important;
+	top: 100% !important;
+	left: 0 !important;
+	right: 0 !important;
+	z-index: 2 !important;
+	margin: 4px 0 0 !important;
+	padding: 4px !important;
+	list-style: none !important;
+	background: rgba(14, 16, 22, 0.96) !important;
+	border: 1px solid rgba(255, 255, 255, 0.1) !important;
+	border-radius: 8px !important;
+}
+.handle-option {
+	display: flex !important;
+	align-items: center !important;
+	gap: 8px !important;
+	min-height: 44px !important;
+	padding: 0 8px !important;
+	border-radius: 6px !important;
+	cursor: pointer !important;
+	overflow: hidden !important;
+}
+.handle-option[aria-selected="true"],
+.handle-option:hover {
+	background: rgba(100, 255, 218, 0.12) !important;
+}
+.handle-avatar {
+	flex: none !important;
+	width: 24px !important;
+	height: 24px !important;
+	border-radius: 50% !important;
+	background: rgba(255, 255, 255, 0.1) !important;
+	object-fit: cover !important;
+}
+.handle-handle {
+	color: rgba(255, 255, 255, 0.9) !important;
+	white-space: nowrap !important;
+}
+.handle-name {
+	color: rgba(255, 255, 255, 0.45) !important;
+	white-space: nowrap !important;
+	overflow: hidden !important;
+	text-overflow: ellipsis !important;
+}
+.preset-submit {
+	flex: none !important;
+	background: rgba(100, 255, 218, 0.22) !important;
+	border-color: rgba(100, 255, 218, 0.45) !important;
+}
+.preset-submit:disabled {
+	opacity: 0.6 !important;
+	cursor: default !important;
+}
+.preset-status:empty {
+	display: none !important;
+}
+.preset-status a,
+.link-button {
+	background: none !important;
+	border: none !important;
+	padding: 0 !important;
+	font: inherit !important;
+	color: #64ffda !important;
+	text-decoration: underline !important;
+	text-underline-offset: 2px !important;
+	cursor: pointer !important;
+}

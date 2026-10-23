@@ -1,0 +1,33 @@
+{
+  "lexicon": 1,
+  "id": "io.zzstoatzz.physics.preset",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A look for the particles on zzstoatzz.io, saved by its author: every setting, as the site's share links carry them. Loading https://zzstoatzz.io/?preset=<at-uri of this record> applies it.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["settings", "createdAt"],
+        "properties": {
+          "settings": {
+            "type": "string",
+            "maxLength": 10000,
+            "description": "The settings as a URL query string of KEY=value pairs, the same form as the site's share links (PARTICLE_COUNT=6650&DRAG=0.17&COLOR_MODE=species). A query string because settings are mostly fractional and the data model has no floats. Keys the site doesn't know are ignored, and keys left out take the site's defaults at load time, so the set of settings can grow without a new schema. Client-declared: the site clamps every value to its own range when it loads one."
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 640,
+            "maxGraphemes": 64,
+            "description": "What the author calls this look. Optional, client-declared."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Client-declared time the preset was saved."
+          }
+        }
+      }
+    }
+  }
+}

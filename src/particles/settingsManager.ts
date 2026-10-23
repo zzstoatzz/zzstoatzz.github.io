@@ -27,10 +27,25 @@ function parseSetting(key: SettingKey, value: string): Settings[SettingKey] | nu
 	return n;
 }
 
-// Whether a query string sets any particle setting, i.e. it's a shared link.
+// Whether a query string brings a look of its own: any particle setting, or
+// a saved preset (presets.ts).
 export function carriesSettings(search: string): boolean {
 	const params = new URLSearchParams(search);
-	return SETTING_KEYS.some((key) => params.has(key));
+	return params.has("preset") || SETTING_KEYS.some((key) => params.has(key));
+}
+
+// Every setting a query string sets, parsed and clamped; unknown keys and
+// values that don't parse are dropped.
+export function settingsFromQuery(query: string): Partial<Settings> {
+	const params = new URLSearchParams(query);
+	const out: Partial<Settings> = {};
+	for (const key of SETTING_KEYS) {
+		const raw = params.get(key);
+		if (raw === null) continue;
+		const value = parseSetting(key, raw);
+		if (value !== null) Object.assign(out, { [key]: value });
+	}
+	return out;
 }
 
 // Round floats so links don't carry 0.30000000000000004.
@@ -58,12 +73,7 @@ export class SettingsManager {
 			window.history.replaceState({ path: url }, "", url);
 		}
 
-		for (const key of SETTING_KEYS) {
-			const raw = params.get(key);
-			if (raw === null) continue;
-			const value = parseSetting(key, raw);
-			if (value !== null) Object.assign(this.settings, { [key]: value });
-		}
+		Object.assign(this.settings, settingsFromQuery(params.toString()));
 
 		// always notify, so the initial settings get applied
 		this.onChange(this.settings);
@@ -106,8 +116,20 @@ export class SettingsManager {
 
 	// Every setting, so the link pins the look even if the defaults change.
 	generateShareLink(): string {
+		return `${window.location.origin}${window.location.pathname}?${this.toQuery()}`;
+	}
+
+	// every setting as a query string: what a share link and a saved preset carry
+	toQuery(): string {
 		const params = new URLSearchParams();
 		for (const key of SETTING_KEYS) params.set(key, formatSetting(this.settings[key]));
-		return `${window.location.origin}${window.location.pathname}?${params}`;
+		return params.toString();
+	}
+
+	// Replace the whole look with a query string's settings, defaults for the
+	// rest, leaving the URL alone (it points at where the look came from).
+	applyQuery(query: string) {
+		this.settings = { ...DEFAULT_SETTINGS, ...settingsFromQuery(query) };
+		this.onChange(this.settings);
 	}
 }
