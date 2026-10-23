@@ -48,6 +48,14 @@ const U_SIZE = 144;
 const R_SIZE = 16 * 2 + 16 * 16; // size, connection color, 16 palette slots
 const WG = 128;
 
+interface Pipelines {
+	format: GPUTextureFormat;
+	kernels: Record<Kernel, GPUComputePipeline>;
+	discs: GPURenderPipeline;
+	linePipe: GPURenderPipeline;
+	blit: GPURenderPipeline;
+}
+
 // GPUBufferUsage, read on first use: engines without webgpu (ios 18
 // webviews) don't define it, and touching it while this module loads would
 // throw before the cpu path could take over
@@ -69,10 +77,10 @@ export class GpuPhysics {
 
 	private ctx: GPUCanvasContext;
 	private format: GPUTextureFormat;
-	private kernels!: Record<Kernel, GPUComputePipeline>;
-	private discs!: GPURenderPipeline;
-	private linePipe!: GPURenderPipeline;
-	private blit!: GPURenderPipeline;
+	private kernels: Record<Kernel, GPUComputePipeline>;
+	private discs: GPURenderPipeline;
+	private linePipe: GPURenderPipeline;
+	private blit: GPURenderPipeline;
 	private lineCap: number;
 	private maxShapes: number;
 
@@ -112,7 +120,8 @@ export class GpuPhysics {
 		device.pushErrorScope("validation");
 		let gpu: GpuPhysics | null = null;
 		try {
-			gpu = new GpuPhysics(w, device, width, height);
+			const pipes = await GpuPhysics.pipelines(w, device, navigator.gpu.getPreferredCanvasFormat());
+			gpu = new GpuPhysics(w, device, width, height, pipes);
 		} catch (e) {
 			console.warn("webgpu physics: setup failed:", e);
 		}
@@ -131,6 +140,7 @@ export class GpuPhysics {
 		private device: GPUDevice,
 		width: number,
 		height: number,
+		pipes: Pipelines,
 	) {
 		B = GPUBufferUsage;
 		this.lineCap = w.gpuLineCap();
@@ -139,10 +149,13 @@ export class GpuPhysics {
 		const ctx = this.canvas.getContext("webgpu");
 		if (!ctx) throw new Error("webgpu canvas unavailable");
 		this.ctx = ctx;
-		this.format = navigator.gpu.getPreferredCanvasFormat();
+		this.format = pipes.format;
 		ctx.configure({ device, format: this.format, alphaMode: "premultiplied" });
 
-		this.makePipelines();
+		this.kernels = pipes.kernels;
+		this.discs = pipes.discs;
+		this.linePipe = pipes.linePipe;
+		this.blit = pipes.blit;
 		this.uni = this.buffer(U_SIZE, B.UNIFORM | B.COPY_DST);
 		this.runi = this.buffer(R_SIZE, B.UNIFORM | B.COPY_DST);
 		this.shapes = this.buffer(SHAPE_SIZE * this.maxShapes, B.STORAGE | B.COPY_DST);
@@ -166,23 +179,21 @@ export class GpuPhysics {
 		return this.device.createBuffer({ size: Math.max(16, size), usage });
 	}
 
-	private shader(k: number) {
-		const w = this.w;
+	// Compiled off the main thread, so the page keeps animating while they build.
+	private static async pipelines(w: PhysicsExports & GpuExports, d: GPUDevice, format: GPUTextureFormat): Promise<Pipelines> {
 		const text = (ptr: number, len: number) => new TextDecoder().decode(new Uint8Array(w.memory.buffer, ptr, len));
-		const src = text(w.gpuShaderPtr(k), w.gpuShaderLen(k));
-		const code = w.gpuShaderUsesCommon(k) ? text(w.gpuCommonPtr(), w.gpuCommonLen()) + src : src;
-		return this.device.createShaderModule({ code });
-	}
-
-	private makePipelines() {
-		const d = this.device;
-		this.kernels = Object.fromEntries(
-			KERNELS.map((name) => [
+		const shader = (k: number) => {
+			const src = text(w.gpuShaderPtr(k), w.gpuShaderLen(k));
+			const code = w.gpuShaderUsesCommon(k) ? text(w.gpuCommonPtr(), w.gpuCommonLen()) + src : src;
+			return d.createShaderModule({ code });
+		};
+		const kernels = Promise.all(
+			KERNELS.map(async (name) => [
 				name,
-				d.createComputePipeline({ layout: "auto", compute: { module: this.shader(K[name]), entryPoint: "main" } }),
+				await d.createComputePipelineAsync({ layout: "auto", compute: { module: shader(K[name]), entryPoint: "main" } }),
 			]),
-		) as Record<Kernel, GPUComputePipeline>;
-		const render = this.shader(K.render);
+		);
+		const render = shader(K.render);
 		const draw = (
 			module: GPUShaderModule,
 			vs: string,
@@ -191,7 +202,7 @@ export class GpuPhysics {
 			format: GPUTextureFormat,
 			blend: GPUBlendState,
 		) =>
-			d.createRenderPipeline({
+			d.createRenderPipelineAsync({
 				layout: "auto",
 				vertex: { module, entryPoint: vs },
 				fragment: { module, entryPoint: fs, targets: [{ format, blend }] },
@@ -210,9 +221,13 @@ export class GpuPhysics {
 			color: { srcFactor: "one", dstFactor: "zero" },
 			alpha: { srcFactor: "one", dstFactor: "zero" },
 		};
-		this.discs = draw(render, "vs_disc", "fs_disc", "triangle-strip", "rgba8unorm", normal);
-		this.linePipe = draw(render, "vs_line", "fs_line", "line-list", "rgba8unorm", additive);
-		this.blit = draw(this.shader(K.blit), "vs_full", "fs_full", "triangle-list", this.format, replace);
+		const [k, discs, linePipe, blit] = await Promise.all([
+			kernels,
+			draw(render, "vs_disc", "fs_disc", "triangle-strip", "rgba8unorm", normal),
+			draw(render, "vs_line", "fs_line", "line-list", "rgba8unorm", additive),
+			draw(shader(K.blit), "vs_full", "fs_full", "triangle-list", format, replace),
+		]);
+		return { format, kernels: Object.fromEntries(k) as Record<Kernel, GPUComputePipeline>, discs, linePipe, blit };
 	}
 
 	// Room for n particles, keeping the first this.n.

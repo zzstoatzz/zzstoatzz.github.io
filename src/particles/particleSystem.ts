@@ -23,6 +23,11 @@ import type { WebGLParticleRenderer } from "./webglRenderer";
 // how long the gpu gets to come up (adapter, device, pipelines) before the
 // cpu path stops waiting for it
 const GPU_TIMEOUT_MS = 5000;
+// once the particles can move, how long the final renderer gets before they
+// fade in anyway on whatever is drawing them
+const REVEAL_WAIT_MS = 1000;
+// and if the physics never arrives, how long until they show standing still
+const REVEAL_GIVE_UP_MS = 4000;
 
 export class ParticleSystem {
 	canvas: HTMLCanvasElement;
@@ -55,6 +60,8 @@ export class ParticleSystem {
 	gpu: GpuPhysics | null = null;
 	// settled: no physics, no drawing, no frame loop until wake()
 	private resting = false;
+	// the layers stay transparent until the particles move (particles.css)
+	private revealed = false;
 
 	private animationFrameId: number | null = null;
 	private lastTimestamp = 0;
@@ -106,15 +113,31 @@ export class ParticleSystem {
 
 		this.init();
 
-		// these load in the background; until then Canvas 2D draws and nothing moves
+		// these load in the background; until then Canvas 2D draws and nothing
+		// moves, behind transparent layers
 		this.initBackends();
+		setTimeout(() => this.reveal(), REVEAL_GIVE_UP_MS);
 	}
 
 	// wasm first (the gpu kernels come out of it), then WebGPU, else WebGL
 	private async initBackends() {
 		const wasm = await this.initWasmPhysics();
-		if (wasm && (await this.initGpu(wasm))) return;
-		await this.initWebGL();
+		if (!wasm) return this.reveal();
+		setTimeout(() => this.reveal(), REVEAL_WAIT_MS);
+		if (!(await this.initGpu(wasm))) await this.initWebGL();
+		// one frame on the new renderer first, so its first-draw cost is
+		// paid while the layers are still transparent
+		this.wake();
+		requestAnimationFrame(() => requestAnimationFrame(() => this.reveal()));
+	}
+
+	// Fade the particle layers in (particles.css).
+	private reveal() {
+		if (this.revealed) return;
+		this.revealed = true;
+		for (const el of document.querySelectorAll<HTMLElement>("#particle-canvas, #particle-webgl, #particle-webgpu")) {
+			el.dataset.shown = "";
+		}
 	}
 
 	private async initWasmPhysics() {
@@ -173,6 +196,7 @@ export class ParticleSystem {
 	private mountLayer(el: HTMLCanvasElement, id: string) {
 		el.id = id;
 		el.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;";
+		if (this.revealed) el.dataset.shown = "";
 		if (this.overlayCanvas?.parentElement) {
 			this.overlayCanvas.parentElement.insertBefore(el, this.overlayCanvas);
 		} else {

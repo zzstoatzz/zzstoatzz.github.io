@@ -1,4 +1,16 @@
 /* particle settings panel, shape dock and best-hold badge (imported by app/layout.tsx) */
+/* the particle layers fade in once the particles move (ParticleSystem.reveal) */
+#particle-canvas,
+#particle-webgl,
+#particle-webgpu {
+    opacity: 0;
+    transition: opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+#particle-canvas[data-shown],
+#particle-webgl[data-shown],
+#particle-webgpu[data-shown] {
+    opacity: 1;
+}
 .particle-controls {
     position: fixed;
     top: 1rem;
