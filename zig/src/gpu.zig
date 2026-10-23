@@ -46,11 +46,16 @@ pub const Uniforms = extern struct {
     nshapes: u32 = 0,
     /// compact: ids kept; piston: unused
     aux: u32 = 0,
-    pad: u32 = 0,
+    mode: u32 = 0,
+    paint: u32 = 0,
+    /// this frame takes every color from the static buffer (js recolored)
+    recolor: u32 = 0,
+    sp_force: f32 = 0,
+    dye_rate: f32 = 0,
 };
 
 comptime {
-    std.debug.assert(@sizeOf(Uniforms) == 144);
+    std.debug.assert(@sizeOf(Uniforms) == 160);
 }
 
 /// connection lines drawn per frame, the same budget as the webgl renderer
@@ -125,6 +130,8 @@ frames: u32 = 0,
 /// fraction of the lines kept, so the ones wanted fit the budget
 keep: f64 = 1,
 rest: Rest = .{},
+/// js changed colors; the next frame packed takes them
+recolor: bool = false,
 
 const Gpu = @This();
 
@@ -193,7 +200,13 @@ pub fn pack(g: *Gpu, p: *const Physics, dt_ms: f64) void {
         .has_attr = @intFromBool(@abs(s.attract) >= 1e-6 and r > 0),
         .line_keep = @intFromFloat(@floor(std.math.clamp(g.keep, 0, 1) * std.math.maxInt(u32))),
         .nshapes = nshapes,
+        .mode = @backingInt(s.color_mode),
+        .paint = m.paint,
+        .recolor = @intFromBool(g.recolor),
+        .sp_force = @floatCast(s.species_force),
+        .dye_rate = @floatCast(s.dye_rate),
     };
+    g.recolor = false;
 }
 
 /// a frame's readback from the step kernel: the mean speed decides rest, the
@@ -213,7 +226,36 @@ test "uniforms line up with common.wgsl" {
     try std.testing.expectEqual(@as(usize, 64), @offsetOf(Uniforms, "dt"));
     try std.testing.expectEqual(@as(usize, 80), @offsetOf(Uniforms, "m_active"));
     try std.testing.expectEqual(@as(usize, 128), @offsetOf(Uniforms, "line_keep"));
-    try std.testing.expect(std.mem.indexOf(u8, common, "line_keep: u32, nshapes: u32, aux: u32, pad: u32") != null);
+    try std.testing.expectEqual(@as(usize, 144), @offsetOf(Uniforms, "paint"));
+    try std.testing.expect(std.mem.indexOf(u8, common, "line_keep: u32, nshapes: u32, aux: u32, mode: u32,\n  paint: u32, recolor: u32, sp_force: f32, dye_rate: f32,") != null);
+}
+
+test "the kernels' constants match physics.zig" {
+    var buf: [64]u8 = undefined;
+    for ([_]struct { []const u8, f64 }{
+        .{ "SPECIES_CORE", Physics.species_core },
+        .{ "DYE_REACH", Physics.dye_reach },
+        .{ "PAINT_REACH", Physics.paint_reach },
+    }) |c| {
+        const line = try std.fmt.bufPrint(&buf, "const {s} = {d};", .{ c[0], c[1] });
+        try std.testing.expect(std.mem.indexOf(u8, common, line) != null);
+    }
+    const sp = try std.fmt.bufPrint(&buf, "const MAX_SPECIES = {d}u;", .{Physics.max_species});
+    try std.testing.expect(std.mem.indexOf(u8, common, sp) != null);
+    try std.testing.expect(std.mem.indexOf(u8, common, "const MODE_SPECIES = 1u;") != null);
+    try std.testing.expectEqual(1, @backingInt(Physics.ColorMode.species));
+    try std.testing.expect(std.mem.indexOf(u8, common, "const MODE_DYE = 2u;") != null);
+    try std.testing.expectEqual(2, @backingInt(Physics.ColorMode.dye));
+}
+
+test "a recolor goes out with the next frame only" {
+    var p: Physics = .{};
+    var g: Gpu = .{};
+    g.recolor = true;
+    _ = g.frame(&p, 16.7);
+    try std.testing.expectEqual(@as(u32, 1), g.uni.recolor);
+    _ = g.frame(&p, 16.7);
+    try std.testing.expectEqual(@as(u32, 0), g.uni.recolor);
 }
 
 test "slow frames take 60hz substeps" {

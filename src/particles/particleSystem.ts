@@ -6,6 +6,7 @@
 // Either way, once the crowd settles (zig decides) the frame loop stops and
 // the last frame stays on screen until a touch, a resize or a settings change.
 import type { Settings } from "./config";
+import { PARTICLE_COLORS, SPECIES_SEEDS } from "./config";
 import { spawnParticle, applyParticleSettings, randomColor } from "./particle";
 import { ParticleStore } from "./particleStore";
 import { SettingsManager } from "./settingsManager";
@@ -62,6 +63,8 @@ export class ParticleSystem {
 	private resting = false;
 	// the layers stay transparent until the particles move (particles.css)
 	private revealed = false;
+	// dye mode: the color a press paints, the next of the mix on each press
+	paint = PARTICLE_COLORS.length - 1;
 
 	private animationFrameId: number | null = null;
 	private lastTimestamp = 0;
@@ -323,7 +326,7 @@ export class ParticleSystem {
 				const rect = this.canvas.getBoundingClientRect();
 				this.mouseX = e.clientX - rect.left;
 				this.mouseY = e.clientY - rect.top;
-				this.mouseEffects.startHold();
+				this.startPress();
 			}
 		});
 
@@ -364,7 +367,7 @@ export class ParticleSystem {
 							this.mouseY = touch.clientY - rect.top;
 							// don't preventDefault here — let the browser keep the
 							// option to scroll until we know this is a stationary hold
-							this.mouseEffects.startHold();
+							this.startPress();
 						}
 					}
 				}
@@ -472,7 +475,18 @@ export class ParticleSystem {
 		const s = this.store;
 		for (let i = 0; i < s.count; i++) s.color[i] = randomColor(settings);
 		s.version++;
+		s.colorVersion++;
 		this.wake();
+	}
+
+	private startPress() {
+		if (this.settings.COLOR_MODE === "dye") this.paint = (this.paint + 1) % PARTICLE_COLORS.length;
+		this.mouseEffects.startHold();
+	}
+
+	// a fresh species table
+	newSpecies() {
+		this.settingsManager.updateSetting("SPECIES_SEED", Math.floor(Math.random() * SPECIES_SEEDS));
 	}
 
 	// "randomize colors": back to the mix if one color was on, then reshuffle.

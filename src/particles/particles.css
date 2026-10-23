@@ -387,6 +387,18 @@
 	border-color: rgba(100, 255, 218, 0.5) !important;
 }
 
+/* experimental: the color mode switch, and controls only one mode uses */
+.mode-row {
+	gap: 6px !important;
+	margin-bottom: 10px !important;
+}
+.mode-row .button {
+	padding: 8px 4px !important;
+}
+.particle-controls [data-mode][hidden] {
+	display: none !important;
+}
+
 .section-body .control-group:last-child {
 	margin-bottom: 0 !important;
 	padding-bottom: 0 !important;

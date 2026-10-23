@@ -7,6 +7,7 @@
 import type { GpuExports } from "./gpuPhysics";
 import type { ParticleStore } from "./particleStore";
 import type { ParticleSystem } from "./particleSystem";
+import { COLOR_MODES } from "./config";
 
 // zig/src/wasm.zig. Pointers are byte offsets into memory; bools come back as 0/1.
 export interface PhysicsExports {
@@ -36,6 +37,9 @@ export interface PhysicsExports {
 		width: number,
 		height: number,
 		buildConnections: boolean,
+		colorMode: number,
+		speciesForce: number,
+		dyeRate: number,
 	): void;
 	setMouse(
 		active: boolean,
@@ -48,6 +52,7 @@ export interface PhysicsExports {
 		spinning: boolean,
 		vortexIntensity: number,
 		speedMultiplier: number,
+		paint: number,
 	): void;
 	setShapeCount(n: number): number;
 	setShape(
@@ -60,6 +65,10 @@ export interface PhysicsExports {
 		...planes: number[] // 8 normal components, then 4 offsets
 	): void;
 	seed(s: number): void;
+	seedSpecies(s: number): void;
+	speciesPtr(): number;
+	// changes whenever the dye recolors a particle on the cpu path
+	dyed(): number;
 	step(deltaMs: number): number;
 	// the rest check (gpu.zig Rest) for the cpu path, and waking it
 	cpuRest(): number;
@@ -101,6 +110,7 @@ function mouseParams(ps: ParticleSystem, now: number) {
 		spinning: false,
 		vortexIntensity: 0,
 		speedMultiplier: 1,
+		paint: ps.paint,
 	};
 	if (!active) return out;
 
@@ -141,6 +151,8 @@ const SIMD_PROBE = new Uint8Array([
 export class WasmPhysics {
 	readonly w: PhysicsExports & GpuExports;
 	private conn: (Connections & { buffer: ArrayBuffer }) | null = null;
+	private speciesSeed = -1;
+	private dyed = 0;
 
 	// physics.wasm uses simd128 (safari 16.4+, chrome/firefox 91+); older
 	// engines get the same physics built without it. Each URL is spelled out
@@ -201,7 +213,14 @@ export class WasmPhysics {
 			ps.canvas.width,
 			ps.canvas.height,
 			true, // build connection lines (both renderers draw them)
+			COLOR_MODES.indexOf(s.COLOR_MODE),
+			s.SPECIES_FORCE,
+			s.DYE_SPREAD,
 		);
+		if (s.SPECIES_SEED !== this.speciesSeed) {
+			this.speciesSeed = s.SPECIES_SEED;
+			w.seedSpecies(s.SPECIES_SEED);
+		}
 
 		const shapes = ps.shapeField.shapes;
 		if (!w.setShapeCount(shapes.length)) throw new Error("wasm physics: out of memory");
@@ -217,7 +236,7 @@ export class WasmPhysics {
 		}
 
 		const m = mouseParams(ps, now);
-		w.setMouse(m.active, m.x, m.y, m.radius, m.force, m.vortex, m.down, m.spinning, m.vortexIntensity, m.speedMultiplier);
+		w.setMouse(m.active, m.x, m.y, m.radius, m.force, m.vortex, m.down, m.spinning, m.vortexIntensity, m.speedMultiplier, m.paint);
 	}
 
 	// One cpu physics step for the given system, whose store must be attached
@@ -227,6 +246,11 @@ export class WasmPhysics {
 		this.configure(ps, now);
 		if (!w.step(deltaTime)) throw new Error("wasm physics: step failed");
 		ps.store.sync();
+		const dyed = w.dyed();
+		if (dyed !== this.dyed) {
+			this.dyed = dyed;
+			ps.store.version++;
+		}
 
 		const conn = this.connViews();
 		conn.verts = w.connVerts();

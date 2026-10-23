@@ -26,7 +26,27 @@ pub const Settings = struct {
     height: f64 = 600,
     /// fill the connection-line buffer
     build_connections: bool = true,
+    color_mode: ColorMode = .off,
+    /// species: how hard the colors pull and push on each other
+    species_force: f64 = 0,
+    /// dye: how readily particles that touch take each other's color
+    dye_rate: f64 = 0,
 };
+
+/// what color does besides look: nothing, a force between colors (each
+/// color feels every other through the `species` table), or a dye that
+/// spreads where particles rub past each other
+pub const ColorMode = enum(u8) { off, species, dye };
+
+/// species: below this fraction of r every pair pushes apart; past it the
+/// table's pull or push rises to a peak midway out and fades by r
+pub const species_core = 0.3;
+/// dye: particles closer than this fraction of r touch
+pub const dye_reach = 0.5;
+/// dye: a press paints the particles within this fraction of its radius
+pub const paint_reach = 0.4;
+/// the species table's side: colors past it share rows (index & 15)
+pub const max_species = 16;
 
 pub const Mouse = struct {
     /// js: isMouseDown || releaseMultiplier > 1
@@ -43,6 +63,8 @@ pub const Mouse = struct {
     vortex_intensity: f64 = 0,
     /// 1 + hold * 0.5
     speed_multiplier: f64 = 1,
+    /// dye: the color a press paints
+    paint: u8 = 0,
 };
 
 pub const Shape = struct {
@@ -104,6 +126,11 @@ palette: [256][3]f64 = @splat(.{ 0, 0, 0 }),
 
 settings: Settings = .{},
 mouse: Mouse = .{},
+/// species[a][b]: how color a feels color b, in [-1, 1] (> 0 pulls). not
+/// symmetric, so one color can chase another that runs from it.
+species: [max_species][max_species]f32 = @splat(@splat(0)),
+/// bumped whenever the dye changes a color, so js knows to redraw them
+dyed: u32 = 0,
 shapes: std.ArrayList(Shape) = .empty,
 rng: std.Random.DefaultPrng = .init(0x5eed),
 
@@ -177,6 +204,15 @@ fn maxCells(n: usize) usize {
     return @max(max_cells_floor, 2 * n);
 }
 
+/// a fresh species table from seed
+pub fn seedSpecies(p: *Physics, seed: u32) void {
+    var prng: std.Random.DefaultPrng = .init(seed);
+    const r = prng.random();
+    for (&p.species) |*row| for (row) |*m| {
+        m.* = r.float(f32) * 2 - 1;
+    };
+}
+
 pub fn ensureConnections(p: *Physics, a: Allocator) !void {
     if (p.conn_alpha.len == max_conn_verts) return;
     p.conn_pos = try a.alloc(f32, max_conn_verts * 3);
@@ -239,6 +275,17 @@ fn updateGrid(p: *Physics) void {
 const PairCtx = struct {
     has_attraction: bool,
     has_connections: bool,
+    has_species: bool,
+    has_dye: bool,
+    /// species: the kick per unit of profile, species_force · 60 dt
+    sp_scale: K,
+    core: K,
+    inv_core: K,
+    /// r + core, and 1 / (r - core): the profile peaks at (r + core) / 2
+    peak2: K,
+    inv_span: K,
+    reach2: K,
+    dye_scale: f64,
     r: K,
     r2: K,
     inv_r: K,
@@ -320,6 +367,38 @@ inline fn sweep(p: *Physics, ctx: *const PairCtx, a: u32, lo: u32, hi: u32) void
             vbx.* = @as(V, vbx.*) - @select(K, valid, kx * ma, zero);
             vby.* = @as(V, vby.*) - @select(K, valid, ky * ma, zero);
         }
+        if (ctx.has_species) {
+            // each side feels the other through its own row of the table
+            var mab: V = undefined;
+            var mba: V = undefined;
+            const ca = g.col[a] % max_species;
+            inline for (0..lanes) |k| {
+                const cb = g.col[b + k] % max_species;
+                mab[k] = p.species[ca][cb];
+                mba[k] = p.species[cb][ca];
+            }
+            const core: V = @splat(ctx.core);
+            const in_core = dist < core;
+            const push = dist * @as(V, @splat(ctx.inv_core)) - one;
+            const tent = one - @abs(two * dist - @as(V, @splat(ctx.peak2))) * @as(V, @splat(ctx.inv_span));
+            const fa = @select(K, in_core, push, mab * tent);
+            const fb = @select(K, in_core, push, mba * tent);
+            // masked lanes: dist may be 0 or NaN there
+            const k = @select(K, valid, @as(V, @splat(ctx.sp_scale)) / dist, zero);
+            acc_x += @select(K, valid, k * fa * dx, zero);
+            acc_y += @select(K, valid, k * fa * dy, zero);
+            const vbx: *[lanes]K = g.dvx[b..][0..lanes];
+            const vby: *[lanes]K = g.dvy[b..][0..lanes];
+            vbx.* = @as(V, vbx.*) - @select(K, valid, k * fb * dx, zero);
+            vby.* = @as(V, vby.*) - @select(K, valid, k * fb * dy, zero);
+        }
+        if (ctx.has_dye) {
+            const touch = @select(bool, valid, d2 < @as(V, @splat(ctx.reach2)), valid);
+            if (@reduce(.Or, touch)) {
+                const touch_a: [lanes]bool = touch;
+                inline for (0..lanes) |k| if (touch_a[k]) p.rub(ctx, a, b + @as(u32, k));
+            }
+        }
         // lines: write every lane's record and advance the cursor only past
         // the shown ones. hits are random, so this beats a branch per lane.
         // the buffer stops up to `lanes` lines short so every record fits.
@@ -338,6 +417,21 @@ inline fn sweep(p: *Physics, ctx: *const PairCtx, a: u32, lo: u32, hi: u32) void
     }
     g.dvx[a] += @reduce(.Add, acc_x);
     g.dvy[a] += @reduce(.Add, acc_y);
+}
+
+/// two touching particles of different colors: the faster they slide past
+/// each other, the likelier one takes the other's color
+fn rub(p: *Physics, ctx: *const PairCtx, a: u32, b: u32) void {
+    const g = &p.scratch;
+    if (g.col[a] == g.col[b]) return;
+    const i = g.idx[a];
+    const j = g.idx[b];
+    const dvx = p.vx[i] - p.vx[j];
+    const dvy = p.vy[i] - p.vy[j];
+    const chance = ctx.dye_scale * @sqrt(dvx * dvx + dvy * dvy);
+    const r = p.rng.random();
+    if (!(r.float(f64) < chance)) return;
+    if (r.boolean()) g.col[a] = g.col[b] else g.col[b] = g.col[a];
 }
 
 /// write the line a-b at the cursor (without advancing it)
@@ -369,11 +463,14 @@ const Scratch = struct {
     idx: []u32 = &.{},
     /// line color of each particle
     rgb: [][3]f32 = &.{},
+    /// palette index of each particle
+    col: []u8 = &.{},
 
     fn deinit(g: *Scratch, a: Allocator) void {
         for ([_][]K{ g.x, g.y, g.mass, g.dvx, g.dvy }) |s| a.free(s);
         a.free(g.idx);
         a.free(g.rgb);
+        a.free(g.col);
     }
 
     fn fit(g: *Scratch, a: Allocator, n: usize) !void {
@@ -388,6 +485,8 @@ const Scratch = struct {
         @memset(g.idx, 0);
         g.rgb = try a.alloc([3]f32, cap);
         @memset(g.rgb, .{ 0, 0, 0 });
+        g.col = try a.alloc(u8, cap);
+        @memset(g.col, 0);
     }
 };
 
@@ -396,11 +495,23 @@ fn pairs(p: *Physics) void {
     const r = s.interaction_radius;
     const has_attraction = @abs(s.attract) >= 1e-6 and r > 0;
     const has_connections = s.build_connections and s.connection_opacity > 0.001 and r > 0 and p.conn_alpha.len > 0;
+    const has_species = s.color_mode == .species and s.species_force > 0 and r > 0;
+    const has_dye = s.color_mode == .dye and s.dye_rate > 0 and r > 0;
     p.conn_verts = 0;
-    if (!has_attraction and !has_connections) return;
+    if (!has_attraction and !has_connections and !has_species and !has_dye) return;
+    const core = species_core * r;
     const ctx: PairCtx = .{
         .has_attraction = has_attraction,
         .has_connections = has_connections,
+        .has_species = has_species,
+        .has_dye = has_dye,
+        .sp_scale = @floatCast(s.species_force * p.dt * 60),
+        .core = @floatCast(core),
+        .inv_core = @floatCast(1 / core),
+        .peak2 = @floatCast(r + core),
+        .inv_span = @floatCast(1 / (r - core)),
+        .reach2 = @floatCast(dye_reach * dye_reach * r * r),
+        .dye_scale = s.dye_rate * p.dt * 60,
         .r = @floatCast(r),
         .r2 = @floatCast(r * r),
         .inv_r = @floatCast(1 / r),
@@ -419,6 +530,7 @@ fn pairs(p: *Physics) void {
         g.dvx[k] = 0;
         g.dvy[k] = 0;
         g.idx[k] = i;
+        g.col[k] = p.color[i];
     }
     if (has_connections) for (p.sorted[0..p.n], 0..) |i, k| {
         const c = p.palette[p.color[i]];
@@ -457,6 +569,11 @@ fn pairs(p: *Physics) void {
         p.vx[i] += g.dvx[k];
         p.vy[i] += g.dvy[k];
     }
+    if (has_dye) for (g.idx[0..p.n], g.col[0..p.n]) |i, c| {
+        if (p.color[i] == c) continue;
+        p.color[i] = c;
+        p.dyed +%= 1;
+    };
 }
 
 /// push (or spin) the particles within the mouse radius
@@ -489,6 +606,10 @@ inline fn mousePush(p: *Physics, i: usize) void {
     const dx = p.x[i] - m.x;
     const dy = p.y[i] - m.y;
     const d2 = dx * dx + dy * dy;
+    if (p.settings.color_mode == .dye and m.down and d2 < paint_reach * paint_reach * r2 and p.color[i] != m.paint) {
+        p.color[i] = m.paint;
+        p.dyed +%= 1;
+    }
     if (!(d2 < r2 and d2 > 1e-6)) return;
     const dist = @sqrt(d2);
     const strength = m.force * (1 - dist / m.radius) * (p.dt * 60);
@@ -798,5 +919,96 @@ test "a mouse wider than the crowd pushes like the cell walk does" {
         try std.testing.expect(near.vx[i] != 0 or near.vy[i] != 0);
         try std.testing.expectEqual(near.vx[i], crowd.vx[i]);
         try std.testing.expectEqual(near.vy[i], crowd.vy[i]);
+    }
+}
+
+test "a species table is seeded, in range and not symmetric" {
+    var p: Physics = .{};
+    var q: Physics = .{};
+    p.seedSpecies(7);
+    q.seedSpecies(7);
+    try std.testing.expectEqual(p.species, q.species);
+    var asymmetric = false;
+    for (0..max_species) |a| for (0..max_species) |b| {
+        try std.testing.expect(p.species[a][b] >= -1 and p.species[a][b] <= 1);
+        if (p.species[a][b] != p.species[b][a]) asymmetric = true;
+    };
+    try std.testing.expect(asymmetric);
+    q.seedSpecies(8);
+    try std.testing.expect(!std.meta.eql(p.species, q.species));
+}
+
+/// two particles 30 px apart on a line, colors 0 and 1, nothing but species
+fn speciesPair(a: f32, b: f32) !struct { f64, f64 } {
+    const al = std.testing.allocator;
+    var p: Physics = .{};
+    defer p.deinit(al);
+    try p.resize(al, 2);
+    p.settings = .{ .attract = 0, .connection_opacity = 0, .color_mode = .species, .species_force = 1 };
+    p.species[0][1] = a;
+    p.species[1][0] = b;
+    p.x[0] = 300;
+    p.x[1] = 330;
+    p.y[0] = 300;
+    p.y[1] = 300;
+    p.color[1] = 1;
+    p.dt = 1.0 / 60.0;
+    p.updateGrid();
+    p.pairs();
+    return .{ p.vx[0], p.vx[1] };
+}
+
+test "species pull and push by their own row of the table" {
+    // 0 is drawn to 1 while 1 runs from 0: both head right
+    const chase = try speciesPair(1, -1);
+    try std.testing.expect(chase[0] > 0);
+    try std.testing.expect(chase[1] > 0);
+    try std.testing.expectApproxEqAbs(chase[0], chase[1], 1e-6);
+    // neither cares: nothing happens
+    const calm = try speciesPair(0, 0);
+    try std.testing.expectEqual(@as(f64, 0), calm[0]);
+    try std.testing.expectEqual(@as(f64, 0), calm[1]);
+}
+
+test "a press paints in dye mode, and only in dye mode" {
+    const al = std.testing.allocator;
+    for ([_]ColorMode{ .dye, .species }) |mode| {
+        var p: Physics = .{};
+        defer p.deinit(al);
+        try p.resize(al, 2);
+        p.settings = .{ .color_mode = mode, .dye_rate = 1 };
+        p.mouse = .{ .active = true, .down = true, .x = 400, .y = 300, .radius = 250, .force = 1, .paint = 5 };
+        p.x[0] = 420; // inside the paint reach
+        p.x[1] = 600; // pushed, not painted
+        p.y[0] = 300;
+        p.y[1] = 300;
+        p.dt = 1.0 / 60.0;
+        p.updateGrid();
+        p.mouseForce();
+        try std.testing.expectEqual(@as(u8, if (mode == .dye) 5 else 0), p.color[0]);
+        try std.testing.expectEqual(@as(u8, 0), p.color[1]);
+    }
+}
+
+test "dye spreads between particles sliding past each other, not still ones" {
+    const al = std.testing.allocator;
+    for ([_]f64{ 0, 4 }) |slide| {
+        var p: Physics = .{};
+        defer p.deinit(al);
+        try p.resize(al, 2);
+        p.settings = .{ .attract = 0, .connection_opacity = 0, .color_mode = .dye, .dye_rate = 1 };
+        p.x[0] = 300;
+        p.x[1] = 310;
+        p.y[0] = 300;
+        p.y[1] = 300;
+        p.vy[0] = slide;
+        p.color[1] = 3;
+        p.dt = 1.0 / 60.0;
+        for (0..20) |_| {
+            p.updateGrid();
+            p.pairs();
+        }
+        try std.testing.expectEqual(slide == 0, p.color[0] != p.color[1]);
+        try std.testing.expectEqual(slide == 0, p.dyed == 0);
     }
 }

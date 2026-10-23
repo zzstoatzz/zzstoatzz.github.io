@@ -1,10 +1,11 @@
 // shared by every compute kernel. gpu.zig fills `U` each frame (its extern
 // struct `Uniforms` has the same layout) and prepends this file to each kernel.
 
-// a particle as it moves: the canonical buffer, in no particular order
-struct D { pos: vec2f, vel: vec2f, id: u32, pad: u32 };
+// a particle as it moves: the canonical buffer, in no particular order. its
+// color lives here, since the dye changes it on the gpu.
+struct D { pos: vec2f, vel: vec2f, id: u32, color: u32 };
 // what never moves, indexed by id: rewritten from the js store when sizes or
-// colors change
+// colors change. its color replaces D's only on a recolor frame.
 struct S { radius: f32, mass: f32, color: u32, pad: u32 };
 // a particle sorted into its grid cell, with its static fields copied in
 struct P { pos: vec2f, vel: vec2f, mass: f32, radius: f32, color: u32, id: u32 };
@@ -22,8 +23,16 @@ struct U {
   m_active: u32, m_vortex: u32, m_down: u32, m_spinning: u32,
   mx: f32, my: f32, m_radius: f32, m_force: f32,
   m_vint: f32, m_speed: f32, build_lines: u32, has_attr: u32,
-  line_keep: u32, nshapes: u32, aux: u32, pad: u32,
+  line_keep: u32, nshapes: u32, aux: u32, mode: u32,
+  paint: u32, recolor: u32, sp_force: f32, dye_rate: f32,
 };
+// physics.zig species_core, dye_reach, paint_reach, max_species; color modes
+const SPECIES_CORE = 0.3;
+const DYE_REACH = 0.5;
+const PAINT_REACH = 0.4;
+const MAX_SPECIES = 16u;
+const MODE_SPECIES = 1u;
+const MODE_DYE = 2u;
 @group(0) @binding(0) var<uniform> u: U;
 
 fn cell_xy(p: vec2f) -> vec2i {

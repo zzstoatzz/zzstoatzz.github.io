@@ -31,6 +31,7 @@ export interface GpuExports {
 	gpuFrame(deltaMs: number): number;
 	gpuPrepare(n: number, aux: number): void;
 	gpuStats(speedSum: number, wanted: number): number;
+	gpuRecolor(): void;
 }
 
 // gpu.zig Kernel, in order
@@ -44,7 +45,9 @@ const S_SIZE = 16; // static: radius, mass, color
 const P_SIZE = 32; // sorted particle
 const L_SIZE = 12; // line: a, b, alpha
 const SHAPE_SIZE = 64;
-const U_SIZE = 144;
+const U_SIZE = 160;
+// physics.zig `species`: max_species² f32
+const SPECIES_SIZE = 16 * 16 * 4;
 const R_SIZE = 16 * 2 + 16 * 16; // size, connection color, 16 palette slots
 const WG = 128;
 
@@ -87,6 +90,7 @@ export class GpuPhysics {
 	private uni: GPUBuffer;
 	private runi: GPUBuffer;
 	private shapes: GPUBuffer;
+	private species: GPUBuffer;
 	private lines: GPUBuffer;
 	private args: GPUBuffer;
 	private st: GPUBuffer;
@@ -110,6 +114,7 @@ export class GpuPhysics {
 	private width = 0;
 	private height = 0;
 	private storeVersion = -1;
+	private colorVersion = -1;
 	private lost = false;
 
 	static async create(w: PhysicsExports & GpuExports, width: number, height: number): Promise<GpuPhysics | null> {
@@ -159,6 +164,7 @@ export class GpuPhysics {
 		this.uni = this.buffer(U_SIZE, B.UNIFORM | B.COPY_DST);
 		this.runi = this.buffer(R_SIZE, B.UNIFORM | B.COPY_DST);
 		this.shapes = this.buffer(SHAPE_SIZE * this.maxShapes, B.STORAGE | B.COPY_DST);
+		this.species = this.buffer(SPECIES_SIZE, B.STORAGE | B.COPY_DST);
 		this.lines = this.buffer(L_SIZE * this.lineCap, B.STORAGE);
 		this.args = this.buffer(16, B.STORAGE | B.INDIRECT | B.COPY_DST);
 		this.st = this.buffer(16, B.STORAGE | B.COPY_SRC | B.COPY_DST);
@@ -270,7 +276,7 @@ export class GpuPhysics {
 			count: group(this.kernels.count, [this.uni, this.a, this.counts, this.slot]),
 			scan: group(this.kernels.scan, [this.uni, this.counts, this.starts]),
 			scatter: group(this.kernels.scatter, [this.uni, this.a, this.starts, this.slot, this.stat, this.b]),
-			step: group(this.kernels.step, [this.uni, this.b, this.starts, this.a, this.lines, this.args, this.st, this.shapes]),
+			step: group(this.kernels.step, [this.uni, this.b, this.starts, this.a, this.lines, this.args, this.st, this.shapes, this.species]),
 			clamp: group(this.kernels.clamp, [this.uni, this.args]),
 			// compact writes into b, read as moving particles, then b is copied back
 			compact: group(this.kernels.compact, [this.uni, this.a, this.b]),
@@ -328,6 +334,7 @@ export class GpuPhysics {
 				f[o + 2] = store.vx[i];
 				f[o + 3] = store.vy[i];
 				u[o + 4] = i;
+				u[o + 5] = store.color[i];
 			}
 			this.device.queue.writeBuffer(this.a, this.n * D_SIZE, buf);
 			this.n = n;
@@ -344,6 +351,12 @@ export class GpuPhysics {
 				u[i * 4 + 2] = store.color[i];
 			}
 			this.device.queue.writeBuffer(this.stat, 0, buf);
+		}
+		// colors move with the particles on the gpu (the dye changes them
+		// there); only a recolor in js replaces them, from the static buffer
+		if (store.colorVersion !== this.colorVersion) {
+			this.colorVersion = store.colorVersion;
+			this.w.gpuRecolor();
 		}
 	}
 
@@ -388,6 +401,9 @@ export class GpuPhysics {
 		const d = this.device;
 		const substeps = this.w.gpuFrame(deltaMs);
 		const u = this.uploadUniforms();
+		if (settings.COLOR_MODE === "species") {
+			d.queue.writeBuffer(this.species, 0, this.w.memory.buffer, this.w.speciesPtr(), SPECIES_SIZE);
+		}
 		const ncells = u[3];
 		const buildLines = u[30] !== 0;
 		this.growGrid(ncells);

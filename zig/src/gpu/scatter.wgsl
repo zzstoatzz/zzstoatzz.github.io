@@ -10,5 +10,6 @@
   if (i >= u.n) { return; }
   let d = src[i];
   let s = stat[d.id];
-  dst[starts[cell_of(d.pos)] + slot[i]] = P(d.pos, d.vel, s.mass, s.radius, s.color, d.id);
+  let color = select(d.color, s.color, u.recolor != 0u);
+  dst[starts[cell_of(d.pos)] + slot[i]] = P(d.pos, d.vel, s.mass, s.radius, color, d.id);
 }

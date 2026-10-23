@@ -15,7 +15,10 @@ function debounce(func: () => void, wait: number) {
 function parseSetting(key: SettingKey, value: string): Settings[SettingKey] | null {
 	const fallback = DEFAULT_SETTINGS[key];
 	if (typeof fallback === "boolean") return value === "true";
-	if (typeof fallback === "string") return value;
+	if (typeof fallback === "string") {
+		const { options } = RANGES[key];
+		return !options || options.includes(value) ? value : null;
+	}
 	let n = Number.parseFloat(value);
 	if (Number.isNaN(n)) return null;
 	const { min, max } = RANGES[key];

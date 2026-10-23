@@ -64,6 +64,9 @@ export fn setSettings(
     width: f64,
     height: f64,
     build_connections: bool,
+    color_mode: u32,
+    species_force: f64,
+    dye_rate: f64,
 ) void {
     p.settings = .{
         .interaction_radius = interaction_radius,
@@ -76,6 +79,9 @@ export fn setSettings(
         .width = width,
         .height = height,
         .build_connections = build_connections,
+        .color_mode = std.enums.fromInt(Physics.ColorMode, color_mode) orelse .off,
+        .species_force = species_force,
+        .dye_rate = dye_rate,
     };
 }
 
@@ -90,6 +96,7 @@ export fn setMouse(
     spinning: bool,
     vortex_intensity: f64,
     speed_multiplier: f64,
+    paint: u32,
 ) void {
     p.mouse = .{
         .active = active,
@@ -102,6 +109,7 @@ export fn setMouse(
         .spinning = spinning,
         .vortex_intensity = vortex_intensity,
         .speed_multiplier = speed_multiplier,
+        .paint = @truncate(paint),
     };
 }
 
@@ -143,6 +151,17 @@ export fn setShape(
 
 export fn seed(s: u32) void {
     p.rng = .init(s);
+}
+
+export fn seedSpecies(s: u32) void {
+    p.seedSpecies(s);
+}
+export fn speciesPtr() *const [Physics.max_species][Physics.max_species]f32 {
+    return &p.species;
+}
+/// changes whenever the dye recolors a particle on the cpu path
+export fn dyed() u32 {
+    return p.dyed;
 }
 
 export fn step(delta_ms: f64) bool {
@@ -209,6 +228,11 @@ export fn cpuRest() bool {
     var sum: f64 = 0;
     for (p.vx[0..p.n], p.vy[0..p.n]) |vx, vy| sum += @sqrt(vx * vx + vy * vy);
     return g.rest.update(sum / @as(f64, @floatFromInt(@max(p.n, 1))), p.mouse.active);
+}
+
+/// js changed colors: the gpu takes them on its next frame
+export fn gpuRecolor() void {
+    g.recolor = true;
 }
 
 export fn restWake() void {

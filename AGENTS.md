@@ -48,6 +48,8 @@ The homepage is one fixed screen (`html.home-locked`, set by `components/Home.ts
 
 `zig/src/gpu.zig` and `zig/src/gpu/*.wgsl` are the WebGPU path: the kernels (count, scan, scatter into cell order, step, render) embedded as text, plus the zig that packs their uniforms from the same settings, mouse and shapes, picks 60 Hz substeps for slow frames, budgets the connection lines (200k, thinned by a pair-stable hash) and keeps the rest state both paths use. The `U` struct in `common.wgsl` must match `gpu.zig`'s `Uniforms` field for field.
 
+Color can also act on the physics (the panel's experimental section, `COLOR_MODE`): `species` gives each color a seeded, asymmetric pull or push on every other (`Physics.species`), and `dye` paints under a press and passes colors between particles that rub past each other. Both run on the cpu path (`physics.zig`) and in `gpu/step.wgsl`; on the gpu a particle's color moves with it (`D.color`), and js colors replace it only when the store's `colorVersion` changes.
+
 Two builds: `physics.wasm` (simd128, current browsers) and `physics-nosimd.wasm` (baseline wasm, older engines); `wasmPhysics.ts` picks one by feature detection. Without wasm the particles draw but don't move.
 
 - `cd zig && zig build test` runs the tests (zig 0.17)

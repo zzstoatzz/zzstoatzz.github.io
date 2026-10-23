@@ -11,6 +11,8 @@
 // js for the rest check and the line budget
 @group(0) @binding(6) var<storage, read_write> st: array<atomic<u32>>;
 @group(0) @binding(7) var<storage, read> shapes: array<Shape>;
+// physics.zig `species`, row-major: how color a feels color b
+@group(0) @binding(8) var<storage, read> species: array<f32>;
 
 // the pair force on a particle at p from one of mass m at q (physics.zig
 // sweep): 1/d^2, flat inside min_dist, faded out over the last stretch of r
@@ -59,6 +61,11 @@ fn inside(sh: Shape, p: vec2f, pad: f32) -> bool {
   let nx = nl || u.w - p.x < u.r;
   let ny = nt || u.h - p.y < u.r;
   let walls = attr && u.fs < 0.0 && (nx || ny);
+  let species_on = u.mode == MODE_SPECIES && u.sp_force > 0.0;
+  let dye_on = u.mode == MODE_DYE && u.dye_rate > 0.0;
+  let core = SPECIES_CORE * u.r;
+  var color = me.color;
+  var seed = me.id * 9781u + u.frame * 6271u + 1u;
   for (var oy = -1; oy <= 1; oy++) {
     let cy = c.y + oy;
     if (cy < 0 || cy >= i32(u.rows)) { continue; }
@@ -83,6 +90,20 @@ fn inside(sh: Shape, p: vec2f, pad: f32) -> bool {
       if (d2 >= u.r2 || d2 < 1e-6) { continue; }
       let dist = sqrt(d2);
       if (attr) { dv += pair(p, o.pos, o.mass); }
+      if (species_on) {
+        // physics.zig sweep: a shared push inside the core, then the table's
+        // pull or push, peaking midway out
+        var f = dist / core - 1.0;
+        if (dist >= core) {
+          let m = species[(me.color % MAX_SPECIES) * MAX_SPECIES + o.color % MAX_SPECIES];
+          f = m * (1.0 - abs(2.0 * dist - u.r - core) / (u.r - core));
+        }
+        dv += (u.sp_force * u.dt * 60.0 * f / dist) * d;
+      }
+      if (dye_on && o.color != me.color && d2 < DYE_REACH * DYE_REACH * u.r2) {
+        // physics.zig rub, from this side only: half the chance
+        if (rnd(&seed) < 0.5 * u.dye_rate * u.dt * 60.0 * length(me.vel - o.vel)) { color = o.color; }
+      }
       if (lines_on && j > i) {
         let al = u.opacity * (1.0 - dist / u.r);
         if (al > 0.001) {
@@ -103,6 +124,9 @@ fn inside(sh: Shape, p: vec2f, pad: f32) -> bool {
   if (u.m_active != 0u) {
     let d = p - vec2f(u.mx, u.my);
     let d2 = dot(d, d);
+    if (u.mode == MODE_DYE && u.m_down != 0u && d2 < PAINT_REACH * PAINT_REACH * u.m_radius * u.m_radius) {
+      color = u.paint;
+    }
     if (d2 < u.m_radius * u.m_radius && d2 > 1e-6) {
       let dist = sqrt(d2);
       let strength = u.m_force * (1.0 - dist / u.m_radius) * (u.dt * 60.0);
@@ -126,7 +150,6 @@ fn inside(sh: Shape, p: vec2f, pad: f32) -> bool {
   var q = p + v * dt_adj;
   let r = me.radius;
   let e = u.elasticity;
-  var seed = me.id * 9781u + u.frame * 6271u + 1u;
   if (q.x - r < 0.0) {
     q.x = r + 0.1; v.x *= -e; v.y += (rnd(&seed) - 0.5) * 0.1 * abs(v.x);
   } else if (q.x + r > u.w) {
@@ -168,7 +191,7 @@ fn inside(sh: Shape, p: vec2f, pad: f32) -> bool {
     }
   }
 
-  out[i] = D(q, v, me.id, 0u);
+  out[i] = D(q, v, me.id, color);
   let sp = length(v);
   atomicMax(&st[0], bitcast<u32>(sp));
   atomicAdd(&st[1], u32(min(sp, 40.0) * 256.0));

@@ -20,7 +20,23 @@ export interface Settings {
 	ENABLE_VORTEX_FORCE: boolean;
 	// placed obstacles, as ShapeField.serialize() writes them
 	SHAPES: string;
+	// experimental: what color does besides look (physics.zig ColorMode)
+	COLOR_MODE: ColorMode;
+	SPECIES_FORCE: number;
+	// picks the species table: the same seed makes the same species
+	SPECIES_SEED: number;
+	DYE_SPREAD: number;
 }
+
+// in physics.zig ColorMode order: the index is what zig gets
+export const COLOR_MODES = ["off", "species", "dye"] as const;
+export type ColorMode = (typeof COLOR_MODES)[number];
+// the table keeps pumping energy in (a chase is a pull one way and a push
+// the other), so species only form with this much drag or more; less and the
+// crowd boils into a gas
+export const SPECIES_DRAG = 0.15;
+// species seeds run 0..SPECIES_SEEDS-1
+export const SPECIES_SEEDS = 2 ** 31 - 1;
 
 export type SettingKey = keyof Settings;
 
@@ -29,6 +45,8 @@ export interface Range<T> {
 	max?: number;
 	step?: number;
 	default: T;
+	// the only values a string setting may take
+	options?: readonly string[];
 }
 
 export const RANGES: { [K in SettingKey]: Range<Settings[K]> } = {
@@ -49,6 +67,10 @@ export const RANGES: { [K in SettingKey]: Range<Settings[K]> } = {
 	PARTICLE_SINGLE_COLOR: { default: false },
 	ENABLE_VORTEX_FORCE: { default: false },
 	SHAPES: { default: "" },
+	COLOR_MODE: { default: "off", options: COLOR_MODES },
+	SPECIES_FORCE: { min: 0, max: 0.3, step: 0.005, default: 0.12 },
+	SPECIES_SEED: { min: 0, max: SPECIES_SEEDS - 1, step: 1, default: 1 },
+	DYE_SPREAD: { min: 0, max: 0.2, step: 0.005, default: 0.02 },
 };
 
 export const SETTING_KEYS = Object.keys(RANGES) as SettingKey[];

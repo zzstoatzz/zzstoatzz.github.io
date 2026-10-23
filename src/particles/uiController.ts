@@ -1,8 +1,8 @@
 // The settings panel: a gear icon that opens sliders, color pickers and
 // toggles for every setting, plus reset/share and the shape tools. Styles are
 // in particles.css.
-import type { SettingKey, Settings } from "./config";
-import { RANGES } from "./config";
+import type { ColorMode, SettingKey, Settings } from "./config";
+import { COLOR_MODES, RANGES, SPECIES_DRAG } from "./config";
 import type { ParticleSystem } from "./particleSystem";
 import { mountOnBody } from "./dom";
 
@@ -12,6 +12,19 @@ const LABELS: Partial<Record<SettingKey, string>> = {
 	EXPLOSION_RADIUS: "touch radius",
 	SMOOTHING_FACTOR: "softening",
 	ENABLE_VORTEX_FORCE: "samus touch",
+	SPECIES_FORCE: "species pull",
+	DYE_SPREAD: "dye spread",
+};
+
+// experimental: what each color mode does, and the settings only it uses
+const MODE_NOTES: Record<ColorMode, string> = {
+	off: "color is just color.",
+	species: "each color pulls or pushes on every other, and not evenly: some chase, some run. needs drag, so it turns drag up while on.",
+	dye: "hold to paint. particles that rub past each other trade colors, so stirring spreads it.",
+};
+const MODE_SETTINGS: Partial<Record<SettingKey, ColorMode>> = {
+	SPECIES_FORCE: "species",
+	DYE_SPREAD: "dye",
 };
 
 type SettingChange = <K extends SettingKey>(key: K, value: Settings[K]) => void;
@@ -157,7 +170,12 @@ export class UIController {
 			html += '</div></div>';
 		}
 
-		html += `
+		html += this.generateShapesSection() + this.generateExperimentalSection();
+		return html;
+	}
+
+	generateShapesSection() {
+		return `
 			<div class="control-section">
 				<button type="button" class="section-toggle" data-section="shapes" aria-expanded="false">
 					<span class="chevron">▶</span>shapes
@@ -171,8 +189,41 @@ export class UIController {
 				</div>
 			</div>
 		`;
+	}
 
-		return html;
+	// The color modes, and each mode's own controls (shown only in that mode).
+	generateExperimentalSection() {
+		const slider = (key: SettingKey) => {
+			const range = RANGES[key];
+			return `
+				<div class="control-group" data-mode="${MODE_SETTINGS[key]}">
+					<label for="${key}">${LABELS[key]}</label>
+					<div class="slider-row">
+						<input type="range" id="${key}" class="slider-input"
+							min="${range.min}" max="${range.max}" step="${range.step}" value="${range.default}">
+						<span id="${key}_VALUE" class="value-display">${range.default}</span>
+					</div>
+				</div>
+			`;
+		};
+		return `
+			<div class="control-section">
+				<button type="button" class="section-toggle" data-section="experimental" aria-expanded="false">
+					<span class="chevron">▶</span>experimental
+				</button>
+				<div class="section-body" data-section-body="experimental">
+					<div class="button-row mode-row" role="radiogroup" aria-label="color mode" style="margin-top: 0;">
+						${COLOR_MODES.map((m) => `<button type="button" class="button" role="radio" data-color-mode="${m}">${m}</button>`).join("")}
+					</div>
+					<p class="section-note" id="colorModeNote"></p>
+					${slider("SPECIES_FORCE")}
+					<div class="button-row" data-mode="species" style="margin-top: 0;">
+						<button id="newSpecies" class="button">new species</button>
+					</div>
+					${slider("DYE_SPREAD")}
+				</div>
+			</div>
+		`;
 	}
 
 	bindEvents() {
@@ -319,6 +370,18 @@ export class UIController {
 			this.showSuccessMessage("colors randomized");
 		});
 
+		for (const mode of COLOR_MODES) {
+			const button = document.querySelector<HTMLElement>(`[data-color-mode="${mode}"]`);
+			if (!button) continue;
+			button.id = `colorMode-${mode}`;
+			onTap(button.id, () => this.setColorMode(mode));
+		}
+
+		onTap("newSpecies", () => {
+			this.system.newSpecies();
+			this.showSuccessMessage("new species");
+		});
+
 		// Accordion sections — one open at a time
 		for (const toggle of document.querySelectorAll<HTMLElement>('.section-toggle')) {
 			toggle.addEventListener('click', () => {
@@ -381,6 +444,25 @@ export class UIController {
 		}, { passive: true });
 	}
 	
+	// Species turns drag up to what it needs, and leaving species puts it
+	// back, unless the drag was changed in between.
+	private dragBeforeSpecies: number | null = null;
+
+	setColorMode(mode: ColorMode) {
+		const manager = this.system.settingsManager;
+		const before = manager.getAllSettings();
+		if (before.COLOR_MODE === mode) return;
+		if (mode === "species" && before.DRAG < SPECIES_DRAG) {
+			this.dragBeforeSpecies = before.DRAG;
+			this.onSettingChange("DRAG", SPECIES_DRAG);
+		} else if (before.COLOR_MODE === "species" && this.dragBeforeSpecies !== null) {
+			if (before.DRAG === SPECIES_DRAG) this.onSettingChange("DRAG", this.dragBeforeSpecies);
+			this.dragBeforeSpecies = null;
+		}
+		this.onSettingChange("COLOR_MODE", mode);
+		this.updateUI(manager.getAllSettings());
+	}
+
 	setShapeModeActive(active: boolean) {
 		const button = document.getElementById("toggleShapeMode");
 		if (!button) return;
@@ -407,6 +489,18 @@ export class UIController {
 	}
 
 	updateUI(settings: Settings) {
+		const mode = settings.COLOR_MODE;
+		for (const button of document.querySelectorAll<HTMLElement>("[data-color-mode]")) {
+			const on = button.dataset.colorMode === mode;
+			button.classList.toggle("armed", on);
+			button.setAttribute("aria-checked", String(on));
+		}
+		for (const el of document.querySelectorAll<HTMLElement>(".particle-controls [data-mode]")) {
+			el.hidden = el.dataset.mode !== mode;
+		}
+		const note = document.getElementById("colorModeNote");
+		if (note) note.textContent = MODE_NOTES[mode];
+
 		// Update all sliders and displays
 		for (const key of Object.keys(settings) as SettingKey[]) {
 			const value = settings[key];
