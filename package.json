@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "astro build && bun scripts/og.ts",
     "preview": "astro preview",
     "check": "astro check",
     "lint": "astro check && eslint src",
