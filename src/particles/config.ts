@@ -32,9 +32,9 @@ export interface Range<T> {
 }
 
 export const RANGES: { [K in SettingKey]: Range<Settings[K]> } = {
-	PARTICLE_COUNT: { min: 50, max: 15000, step: 50, default: 700 },
-	AVERAGE_PARTICLE_SIZE: { min: 1, max: 6, step: 0.1, default: 2.5 },
-	DRAG: { min: 0, max: 0.2, step: 0.005, default: 0.05 },
+	PARTICLE_COUNT: { min: 50, max: 15000, step: 50, default: 1500 },
+	AVERAGE_PARTICLE_SIZE: { min: 1, max: 6, step: 0.1, default: 1.5 },
+	DRAG: { min: 0, max: 0.2, step: 0.005, default: 0.01 },
 	EXPLOSION_RADIUS: { min: 50, max: 500, step: 10, default: 250 },
 	EXPLOSION_FORCE: { min: 0, max: 7.5, step: 0.05, default: 0.5 },
 	ATTRACT: { min: -1000, max: 1000, step: 1, default: -100 },
