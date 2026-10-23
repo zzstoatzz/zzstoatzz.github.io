@@ -86,8 +86,8 @@ export class UIController {
 
 		// Group controls by category with updated names and added ELASTICITY
 		const categories: Record<string, SettingKey[]> = {
-			'particles': ['PARTICLE_COUNT', 'AVERAGE_PARTICLE_SIZE', 'DRAG', 'ELASTICITY'],
-			'forces': ['GRAVITY', 'ATTRACT', 'SMOOTHING_FACTOR', 'EXPLOSION_RADIUS', 'EXPLOSION_FORCE', 'ENABLE_VORTEX_FORCE'],
+			'particles': ['PARTICLE_COUNT', 'AVERAGE_PARTICLE_SIZE', 'ELASTICITY'],
+			'forces': ['GRAVITY', 'DRAG', 'ATTRACT', 'SMOOTHING_FACTOR', 'EXPLOSION_RADIUS', 'EXPLOSION_FORCE', 'ENABLE_VORTEX_FORCE'],
 			'color': ['PARTICLE_SINGLE_COLOR', 'PARTICLE_COLOR'],
 			'connections': ['INTERACTION_RADIUS', 'CONNECTION_OPACITY', 'CONNECTION_WIDTH', 'CONNECTION_COLOR']
 		};

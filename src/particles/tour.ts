@@ -44,7 +44,7 @@ const STEPS: Step[] = [
 		where: "particles",
 		choices: [
 			{ name: "a few", desc: "300 big ones with lots of room", set: { PARTICLE_COUNT: 300, AVERAGE_PARTICLE_SIZE: 3.5 }, hint: "big and easy to follow" },
-			{ name: "a bunch", desc: "700, the usual crowd", set: { PARTICLE_COUNT: 700, AVERAGE_PARTICLE_SIZE: 2.5 }, hint: "the default" },
+			{ name: "a bunch", desc: "1,500, the usual crowd", set: { PARTICLE_COUNT: 1500, AVERAGE_PARTICLE_SIZE: 1.5 }, hint: "the default" },
 			{ name: "a swarm", desc: "3,000 small ones, like dust", set: { PARTICLE_COUNT: 3000, AVERAGE_PARTICLE_SIZE: 1.3 }, hint: "stir it and it moves like smoke" },
 		],
 		dial: { key: "PARTICLE_COUNT", name: "particle count" },
@@ -66,7 +66,7 @@ const STEPS: Step[] = [
 		q: "what's the world like?",
 		where: "particles and forces",
 		choices: [
-			{ name: "floaty", desc: "no gravity, a little air to slow them", set: { GRAVITY: 0, DRAG: 0.05, ELASTICITY: 0.8 },
+			{ name: "floaty", desc: "no gravity, a little air to slow them", set: { GRAVITY: 0, DRAG: 0.01, ELASTICITY: 0.8 },
 				hint: "things settle down after a stir" },
 			{ name: "sand", desc: "they drop and pile on the floor", set: { GRAVITY: 10, DRAG: 0.02, ELASTICITY: 0.3 },
 				hint: "blast the pile and watch it rain back down" },
