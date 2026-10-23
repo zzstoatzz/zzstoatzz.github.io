@@ -8,8 +8,9 @@
 // buffers the kernels wrote, looking like webglRenderer.ts.
 //
 // The js ParticleStore stays the source of truth for what doesn't move
-// (size, mass, color, by particle index = id) and for new particles; once
-// uploaded, positions and velocities live only on the gpu.
+// (size and mass, by particle index = id) and for new particles; once
+// uploaded, positions, velocities and colors live only on the gpu, where the
+// dye can change a color. A recolor in js (store.colorVersion) replaces them.
 import type { Settings } from "./config";
 import { lineCoverage } from "./config";
 import type { ParticleStore } from "./particleStore";
@@ -40,7 +41,7 @@ type Kernel = "count" | "scan" | "scatter" | "step" | "clamp" | "compact" | "pis
 const KERNELS: Kernel[] = ["count", "scan", "scatter", "step", "clamp", "compact", "piston"];
 
 // byte sizes of the wgsl structs (gpu/common.wgsl)
-const D_SIZE = 24; // moving particle: pos, vel, id
+const D_SIZE = 24; // moving particle: pos, vel, id, color
 const S_SIZE = 16; // static: radius, mass, color
 const P_SIZE = 32; // sorted particle
 const L_SIZE = 12; // line: a, b, alpha

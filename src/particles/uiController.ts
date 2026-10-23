@@ -23,10 +23,22 @@ const MODE_NOTES: Record<ColorMode, string> = {
 	species: "each color pulls or pushes on every other, and not evenly: some chase, some run. needs drag, so it turns drag up while on.",
 	dye: "hold to paint. particles that rub past each other trade colors, so stirring spreads it.",
 };
-const MODE_SETTINGS: Partial<Record<SettingKey, ColorMode>> = {
-	SPECIES_FORCE: "species",
-	DYE_SPREAD: "dye",
-};
+
+// A labelled slider for a setting; `mode` shows it only in that color mode.
+function slider(key: SettingKey, mode?: ColorMode) {
+	const range = RANGES[key];
+	const label = LABELS[key] ?? key.toLowerCase().replace(/_/g, " ");
+	return `
+		<div class="control-group"${mode ? ` data-mode="${mode}"` : ""}>
+			<label for="${key}">${label}</label>
+			<div class="slider-row">
+				<input type="range" id="${key}" class="slider-input"
+					min="${range.min}" max="${range.max}" step="${range.step}" value="${range.default}">
+				<span id="${key}_VALUE" class="value-display">${range.default}</span>
+			</div>
+		</div>
+	`;
+}
 
 type SettingChange = <K extends SettingKey>(key: K, value: Settings[K]) => void;
 
@@ -34,6 +46,8 @@ export class UIController {
 	private particleControls: HTMLElement | null = null;
 	private settingsIcon: HTMLElement | null = null;
 	readonly presets: PresetPanel;
+	// species turns drag up to what it needs; leaving species puts back this
+	private dragBeforeSpecies: number | null = null;
 
 	constructor(
 		private system: ParticleSystem,
@@ -151,16 +165,7 @@ export class UIController {
 						</div>
 					`;
 				} else {
-					html += `
-						<div class="control-group">
-							<label for="${key}">${labelText}</label>
-							<div class="slider-row">
-								<input type="range" id="${key}" class="slider-input" 
-									min="${range.min}" max="${range.max}" step="${range.step}" value="${range.default}">
-								<span id="${key}_VALUE" class="value-display">${range.default}</span>
-							</div>
-						</div>
-					`;
+					html += slider(key);
 				}
 			}
 
@@ -198,19 +203,6 @@ export class UIController {
 
 	// The color modes, and each mode's own controls (shown only in that mode).
 	generateExperimentalSection() {
-		const slider = (key: SettingKey) => {
-			const range = RANGES[key];
-			return `
-				<div class="control-group" data-mode="${MODE_SETTINGS[key]}">
-					<label for="${key}">${LABELS[key]}</label>
-					<div class="slider-row">
-						<input type="range" id="${key}" class="slider-input"
-							min="${range.min}" max="${range.max}" step="${range.step}" value="${range.default}">
-						<span id="${key}_VALUE" class="value-display">${range.default}</span>
-					</div>
-				</div>
-			`;
-		};
 		return `
 			<div class="control-section">
 				<button type="button" class="section-toggle" data-section="experimental" aria-expanded="false">
@@ -218,14 +210,14 @@ export class UIController {
 				</button>
 				<div class="section-body" data-section-body="experimental">
 					<div class="button-row mode-row" role="radiogroup" aria-label="color mode" style="margin-top: 0;">
-						${COLOR_MODES.map((m) => `<button type="button" class="button" role="radio" data-color-mode="${m}">${m}</button>`).join("")}
+						${COLOR_MODES.map((m) => `<button type="button" id="colorMode-${m}" class="button" role="radio" data-color-mode="${m}">${m}</button>`).join("")}
 					</div>
 					<p class="section-note" id="colorModeNote"></p>
-					${slider("SPECIES_FORCE")}
+					${slider("SPECIES_FORCE", "species")}
 					<div class="button-row" data-mode="species" style="margin-top: 0;">
 						<button id="newSpecies" class="button">new species</button>
 					</div>
-					${slider("DYE_SPREAD")}
+					${slider("DYE_SPREAD", "dye")}
 				</div>
 			</div>
 		`;
@@ -375,12 +367,7 @@ export class UIController {
 			this.showSuccessMessage("colors randomized");
 		});
 
-		for (const mode of COLOR_MODES) {
-			const button = document.querySelector<HTMLElement>(`[data-color-mode="${mode}"]`);
-			if (!button) continue;
-			button.id = `colorMode-${mode}`;
-			onTap(button.id, () => this.setColorMode(mode));
-		}
+		for (const mode of COLOR_MODES) onTap(`colorMode-${mode}`, () => this.setColorMode(mode));
 
 		onTap("newSpecies", () => {
 			this.system.newSpecies();
@@ -451,8 +438,6 @@ export class UIController {
 	
 	// Species turns drag up to what it needs, and leaving species puts it
 	// back, unless the drag was changed in between.
-	private dragBeforeSpecies: number | null = null;
-
 	setColorMode(mode: ColorMode) {
 		const manager = this.system.settingsManager;
 		const before = manager.getAllSettings();

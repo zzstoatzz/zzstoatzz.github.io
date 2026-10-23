@@ -4,12 +4,13 @@
 // these needs it.
 import type { ParticleSystem } from "./particleSystem";
 import type * as PresetsModule from "./presets";
-import type { Saved } from "./presets";
+import type { Account, Saved } from "./presets";
 
 let presets: Promise<typeof PresetsModule> | null = null;
 const loadPresets = () => (presets ??= import("./presets"));
 
 const TYPEAHEAD = "https://typeahead.waow.tech/xrpc/app.bsky.actor.searchActorsTypeahead";
+
 // the look being saved, kept in this tab across the sign-in round trip,
 // which comes back to a bare page: if the save doesn't finish, it's put back
 const RETURN_KEY = "presetReturn";
@@ -31,6 +32,28 @@ function stashed(): string | null {
 	}
 }
 
+// the site link that loads a saved preset
+const presetLink = (uri: string) => `${location.origin}/?preset=${encodeURIComponent(uri)}`;
+
+// Replace the whole look, and show it in the panel.
+function applyLook(system: ParticleSystem, settings: string) {
+	system.settingsManager.applyQuery(settings);
+	system.uiController.updateUI(system.settingsManager.getAllSettings());
+}
+
+// The ?preset= on this page load, if any: fetch it and apply it. Resolves
+// either way (a missing or broken preset leaves the defaults).
+export async function loadPresetFromUrl(system: ParticleSystem): Promise<void> {
+	const uri = new URLSearchParams(location.search).get("preset");
+	if (!uri) return;
+	try {
+		const { load } = await loadPresets();
+		applyLook(system, await load(uri));
+	} catch (e) {
+		console.warn("couldn't load preset:", e);
+	}
+}
+
 interface Actor {
 	handle: string;
 	displayName?: string;
@@ -46,13 +69,14 @@ export class PresetPanel {
 	private account!: HTMLElement;
 	private submit!: HTMLButtonElement;
 	private status!: HTMLElement;
+	// a stored session that can save; while there is one, no handle box
+	private signedIn = false;
+	private busy = false;
+	// the typeahead
 	private actors: Actor[] = [];
 	private active = -1;
 	private search: AbortController | null = null;
 	private debounce: ReturnType<typeof setTimeout> | undefined;
-	// a stored session that can save; when set, the handle box is hidden
-	private signedIn = false;
-	private busy = false;
 
 	constructor(private system: ParticleSystem) {}
 
@@ -101,62 +125,73 @@ export class PresetPanel {
 			e.preventDefault();
 			void this.save(this.signedIn ? undefined : this.handle.value);
 		});
+		// Back from the sign-in page can bring this page out of the back/forward
+		// cache mid-redirect; the save it started is over
+		window.addEventListener("pageshow", (e) => {
+			if (!e.persisted || !this.busy) return;
+			stash(null);
+			this.setBusy(false);
+			this.say("");
+		});
 		this.handle.addEventListener("input", () => this.queueSearch());
 		this.handle.addEventListener("keydown", (e) => this.onKey(e));
 		this.handle.addEventListener("blur", () => this.closeList());
-		// sliders and fields in the panel shouldn't drive the particles
+		// typing in the panel shouldn't drive the particles
 		for (const input of [this.name, this.handle]) {
 			input.addEventListener("touchstart", (e) => e.stopPropagation(), { passive: true });
 		}
 	}
 
-	// Whether a save can skip signing in, and say who it saves as.
-	private async refreshAccount() {
-		const { currentAccount } = await loadPresets();
-		const account = await currentAccount().catch(() => null);
-		this.signedIn = !!account;
-		this.handleField.hidden = this.signedIn;
-		this.account.hidden = !this.signedIn;
-		if (!account) return;
-		this.account.replaceChildren(
-			`saving as ${account.handle ? `@${account.handle}` : account.did}. `,
-			this.linkButton("use another account", () => {
-				this.signedIn = false;
-				this.account.hidden = true;
-				this.handleField.hidden = false;
-				this.handle.focus();
-			}),
-		);
+	// The page load after sign-in: finish the save it started.
+	async resumeIfReturning() {
+		// checked here first so an ordinary load never fetches presets.ts
+		if (!/[#&]state=/.test(location.hash)) return;
+		const { resume, failureMessage } = await loadPresets();
+		this.system.uiController.showControlPanel();
+		this.form.hidden = false;
+		try {
+			const saved = await resume();
+			if (!saved) return;
+			applyLook(this.system, saved.settings);
+			this.showSaved(saved);
+			void this.refreshAccount();
+		} catch (e) {
+			const look = stashed();
+			if (look) {
+				applyLook(this.system, look);
+				history.replaceState(null, "", this.system.settingsManager.generateShareLink());
+			}
+			console.warn("preset save failed:", e);
+			this.say(failureMessage(e));
+		} finally {
+			stash(null);
+		}
 	}
 
 	private async save(identifier?: string) {
 		if (this.busy) return;
-		const { save, SaveError, FAILURE_MESSAGES } = await loadPresets();
-		this.setBusy(true, identifier ? "redirecting..." : "saving...");
-		this.say("");
+		const { save, failureMessage } = await loadPresets();
 		const settings = this.system.settingsManager.toQuery();
 		stash(settings);
+		this.setBusy(true, identifier ? "redirecting..." : "saving...");
+		// the gap before the PDS's page loads says where it's going
+		this.say(identifier ? `taking you to @${identifier.trim().replace(/^@/, "")}'s sign-in…` : "");
 		try {
-			const saved = await save(settings, this.name.value.trim(), identifier);
-			stash(null);
-			this.showSaved(saved);
+			this.showSaved(await save(settings, this.name.value.trim(), identifier));
 		} catch (e) {
-			stash(null);
 			console.warn("preset save failed:", e);
-			this.say(e instanceof SaveError ? FAILURE_MESSAGES[e.reason] : FAILURE_MESSAGES.write);
+			this.say(failureMessage(e));
 		} finally {
+			stash(null);
 			this.setBusy(false);
 		}
 	}
 
 	private showSaved(saved: Saved) {
 		const link = presetLink(saved.uri);
-		history.replaceState(null, "", `${location.pathname}?preset=${encodeURIComponent(saved.uri)}`);
+		history.replaceState(null, "", link);
 		const view = document.createElement("a");
-		view.href = saved.recordLink;
-		view.target = "_blank";
-		view.rel = "noopener";
-		view.textContent = "view record";
+		Object.assign(view, { href: saved.recordLink, target: "_blank", rel: "noopener", textContent: "view record" });
 		this.status.replaceChildren(
 			`saved to ${saved.account.handle ? `@${saved.account.handle}` : "your pds"}. `,
 			this.linkButton("copy link", () => {
@@ -169,32 +204,33 @@ export class PresetPanel {
 		this.name.value = "";
 	}
 
-	// The page load after sign-in: finish the save it started.
-	async resumeIfReturning() {
-		if (!/[#&]state=/.test(location.hash)) return;
-		const { resume, SaveError, FAILURE_MESSAGES } = await loadPresets();
-		this.system.uiController.showControlPanel();
-		this.form.hidden = false;
-		try {
-			const saved = await resume();
-			if (!saved) return;
-			// the round trip landed on a bare page; put the saved look back
-			this.system.settingsManager.applyQuery(saved.settings);
-			this.system.uiController.updateUI(this.system.settingsManager.getAllSettings());
-			this.showSaved(saved);
-			void this.refreshAccount();
-		} catch (e) {
-			const look = stashed();
-			if (look) {
-				this.system.settingsManager.applyQuery(look);
-				this.system.uiController.updateUI(this.system.settingsManager.getAllSettings());
-				history.replaceState(null, "", this.system.settingsManager.generateShareLink());
-			}
-			console.warn("preset save failed:", e);
-			this.say(e instanceof SaveError ? FAILURE_MESSAGES[e.reason] : FAILURE_MESSAGES.write);
-		} finally {
-			stash(null);
-		}
+	// Whether a save can skip signing in, and say who it saves as.
+	private async refreshAccount() {
+		const { currentAccount } = await loadPresets();
+		this.setAccount(await currentAccount().catch(() => null));
+	}
+
+	private setAccount(account: Account | null) {
+		this.signedIn = !!account;
+		this.handleField.hidden = !!account;
+		this.account.hidden = !account;
+		if (!account) return;
+		this.account.replaceChildren(
+			`saving as ${account.handle ? `@${account.handle}` : account.did}. `,
+			this.linkButton("use another account", () => {
+				this.setAccount(null);
+				this.handle.focus();
+			}),
+			" · ",
+			this.linkButton("sign out", () => void this.signOut(account)),
+		);
+	}
+
+	private async signOut(account: Account) {
+		const { signOut } = await loadPresets();
+		await signOut(account.did);
+		this.say("signed out.");
+		this.setAccount(null);
 	}
 
 	// --- the handle typeahead (notes: interfaces/atproto-login-page.md)
@@ -225,35 +261,32 @@ export class PresetPanel {
 	}
 
 	private renderList() {
-		this.list.replaceChildren(
-			...this.actors.map((a, i) => {
-				const li = document.createElement("li");
-				li.id = `presetHandle-${i}`;
-				li.role = "option";
-				li.className = "handle-option";
-				li.setAttribute("aria-selected", String(i === this.active));
-				const avatar = document.createElement(a.avatar ? "img" : "span");
-				avatar.className = "handle-avatar";
-				if (a.avatar) Object.assign(avatar, { src: a.avatar, alt: "", loading: "lazy" });
-				const handle = document.createElement("span");
-				handle.className = "handle-handle";
-				handle.textContent = `@${a.handle}`;
-				const name = document.createElement("span");
-				name.className = "handle-name";
-				name.textContent = a.displayName ?? "";
-				li.append(avatar, handle, name);
-				// mousedown, so the input keeps focus until the pick lands
-				li.addEventListener("mousedown", (e) => {
-					e.preventDefault();
-					this.pick(i);
-				});
-				return li;
-			}),
-		);
+		this.list.replaceChildren(...this.actors.map((a, i) => this.option(a, i)));
 		const open = this.actors.length > 0;
 		this.list.hidden = !open;
 		this.handle.setAttribute("aria-expanded", String(open));
 		this.handle.setAttribute("aria-activedescendant", this.active >= 0 ? `presetHandle-${this.active}` : "");
+	}
+
+	// a row: avatar (or a placeholder the same size), @handle, display name
+	private option(actor: Actor, i: number) {
+		const li = document.createElement("li");
+		Object.assign(li, { id: `presetHandle-${i}`, role: "option", className: "handle-option" });
+		li.setAttribute("aria-selected", String(i === this.active));
+		const avatar = document.createElement(actor.avatar ? "img" : "span");
+		avatar.className = "handle-avatar";
+		if (actor.avatar) Object.assign(avatar, { src: actor.avatar, alt: "", loading: "lazy" });
+		const handle = document.createElement("span");
+		Object.assign(handle, { className: "handle-handle", textContent: `@${actor.handle}` });
+		const name = document.createElement("span");
+		Object.assign(name, { className: "handle-name", textContent: actor.displayName ?? "" });
+		li.append(avatar, handle, name);
+		// mousedown, so the input keeps focus until the pick lands
+		li.addEventListener("mousedown", (e) => {
+			e.preventDefault();
+			this.pick(i);
+		});
+		return li;
 	}
 
 	private onKey(e: KeyboardEvent) {
@@ -303,30 +336,8 @@ export class PresetPanel {
 
 	private linkButton(text: string, onClick: () => void) {
 		const b = document.createElement("button");
-		b.type = "button";
-		b.className = "link-button";
-		b.textContent = text;
+		Object.assign(b, { type: "button", className: "link-button", textContent: text });
 		b.addEventListener("click", onClick);
 		return b;
-	}
-}
-
-// the site link that loads a saved preset
-export function presetLink(uri: string) {
-	return `${location.origin}/?preset=${encodeURIComponent(uri)}`;
-}
-
-// The ?preset= on this page load, if any: fetch it and apply it. Resolves
-// either way (a missing or broken preset leaves the defaults).
-export async function loadPresetFromUrl(system: ParticleSystem): Promise<void> {
-	const uri = new URLSearchParams(location.search).get("preset");
-	if (!uri) return;
-	try {
-		const { load } = await loadPresets();
-		const preset = await load(uri);
-		system.settingsManager.applyQuery(preset.settings);
-		system.uiController.updateUI(system.settingsManager.getAllSettings());
-	} catch (e) {
-		console.warn("couldn't load preset:", e);
 	}
 }

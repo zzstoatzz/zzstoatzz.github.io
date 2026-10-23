@@ -45,7 +45,7 @@ pub const species_core = 0.3;
 pub const dye_reach = 0.5;
 /// dye: a press paints the particles within this fraction of its radius
 pub const paint_reach = 0.4;
-/// the species table's side: colors past it share rows (index & 15)
+/// the species table's side: colors past it share rows (color % max_species)
 pub const max_species = 16;
 
 pub const Mouse = struct {
@@ -279,12 +279,15 @@ const PairCtx = struct {
     has_dye: bool,
     /// species: the kick per unit of profile, species_force · 60 dt
     sp_scale: K,
+    /// species: where the shared push gives way to the table, and 1 / that
     core: K,
     inv_core: K,
-    /// r + core, and 1 / (r - core): the profile peaks at (r + core) / 2
+    /// species: r + core, and 1 / (r - core): the profile peaks at (r + core) / 2
     peak2: K,
     inv_span: K,
+    /// dye: the touching distance, squared
     reach2: K,
+    /// dye: the chance per unit of sliding speed, dye_rate · 60 dt
     dye_scale: f64,
     r: K,
     r2: K,

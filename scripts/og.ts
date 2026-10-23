@@ -50,39 +50,51 @@ const w = WIDTH / DPR;
 const h = HEIGHT / DPR;
 const settings: Settings = { ...DEFAULT_SETTINGS, PARTICLE_COUNT: COUNT, ENABLE_VORTEX_FORCE: true };
 
-const wasm = await WasmPhysics.fromBytes(readFileSync(new URL("../src/particles/physics.wasm", import.meta.url)));
-const { w: x } = wasm;
-x.seed(seed);
+const { w: physics } = await WasmPhysics.fromBytes(
+	readFileSync(new URL("../src/particles/physics.wasm", import.meta.url)),
+);
+physics.seed(seed);
 const store = new ParticleStore();
-store.attach(x);
+store.attach(physics);
 store.resize(COUNT);
 for (let i = 0; i < COUNT; i++) spawnParticle(store, i, random() * w, random() * h, settings);
 
-function step(mouse: Parameters<typeof x.setMouse>) {
-	const s = settings;
-	x.setSettings(s.INTERACTION_RADIUS, s.ATTRACT, s.SMOOTHING_FACTOR, s.CONNECTION_OPACITY, s.GRAVITY, s.DRAG, s.ELASTICITY, w, h, true, 0, 0, 0);
-	x.setMouse(...mouse);
-	x.step(FRAME_MS);
+// a held samus touch, as wasmPhysics.ts mouseParams works one out
+interface Hold {
+	x: number;
+	y: number;
+	radius: number;
+	intensity: number;
+	speed: number;
 }
 
-const idle: Parameters<typeof x.setMouse> = [false, 0, 0, 0, 0, true, false, false, 0, 1, 0];
-for (let f = 0; f < SETTLE_FRAMES; f++) step(idle);
+function step(hold: Hold | null) {
+	const s = settings;
+	// no connection lines (none are drawn), color mode off
+	physics.setSettings(s.INTERACTION_RADIUS, s.ATTRACT, s.SMOOTHING_FACTOR, s.CONNECTION_OPACITY, s.GRAVITY, s.DRAG, s.ELASTICITY, w, h, false, 0, 0, 0);
+	// (active, x, y, radius, force, vortex, down, spinning, intensity, speed, paint)
+	if (hold) physics.setMouse(true, hold.x, hold.y, hold.radius, s.EXPLOSION_FORCE, true, true, true, hold.intensity, hold.speed, 0);
+	else physics.setMouse(false, 0, 0, 0, 0, true, false, false, 0, 1, 0);
+	physics.step(FRAME_MS);
+	store.sync();
+}
 
-// a samus touch held off-center (wasmPhysics.ts mouseParams), caught mid-spin
+for (let f = 0; f < SETTLE_FRAMES; f++) step(null);
+
+// held off-center, and caught mid-spin
 const mx = w * (0.35 + random() * 0.3);
 const my = h * (0.4 + random() * 0.2);
-const radius = Math.min(w, h) * 0.45;
-const frames = Math.round(HOLD_SECONDS * 60);
-const trail: Float64Array[] = [];
+const reach = Math.min(w, h) * 0.45;
+const frames = Math.round((HOLD_SECONDS * 1000) / FRAME_MS);
+const trail: { x: Float64Array; y: Float64Array }[] = [];
 for (let f = 0; f < frames; f++) {
-	const t = f / 60;
-	const intensity = Math.min(1, Math.log(t + 1) / Math.log(10));
-	step([true, mx, my, radius * (1 + intensity * intensity), settings.EXPLOSION_FORCE, true, true, true, intensity, 1 + t * 0.5, 0]);
-	store.sync();
-	if (f >= frames - EXPOSURE_FRAMES) trail.push(Float64Array.from([...store.x, ...store.y]));
+	const held = (f * FRAME_MS) / 1000;
+	const intensity = Math.min(1, Math.log(held + 1) / Math.log(10));
+	step({ x: mx, y: my, radius: reach * (1 + intensity * intensity), intensity, speed: 1 + held * 0.5 });
+	if (f >= frames - EXPOSURE_FRAMES) trail.push({ x: store.x.slice(), y: store.y.slice() });
 }
 
-// --- drawing, in linear float rgb, then straight to 8 bits like the canvas
+// --- drawing: float rgb, blended as the canvas blends, rounded to 8 bits
 const px = new Float32Array(WIDTH * HEIGHT * 3);
 for (let i = 0; i < WIDTH * HEIGHT; i++) px.set(BACKGROUND, i * 3);
 
@@ -92,15 +104,13 @@ function blend(ix: number, iy: number, c: Rgb, a: number, additive: boolean) {
 	for (let k = 0; k < 3; k++) px[o + k] = additive ? px[o + k] + c[k] * a : px[o + k] * (1 - a) + c[k] * a;
 }
 
-// an additive 1px antialiased segment from color ca to cb, sampled every
-// half pixel
-function segment(ax: number, ay: number, bx: number, by: number, ca: Rgb, cb: Rgb, a: number) {
+// an additive 1px antialiased segment, sampled every half pixel
+function segment(ax: number, ay: number, bx: number, by: number, c: Rgb, a: number) {
 	const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) * 2));
 	for (let k = 0; k <= steps; k++) {
 		const u = k / steps;
 		const sx = ax + (bx - ax) * u;
 		const sy = ay + (by - ay) * u;
-		const c: Rgb = [0, 1, 2].map((j) => ca[j] + (cb[j] - ca[j]) * u) as Rgb;
 		const fx = Math.floor(sx);
 		const fy = Math.floor(sy);
 		const gx = sx - fx;
@@ -114,20 +124,16 @@ function segment(ax: number, ay: number, bx: number, by: number, ca: Rgb, cb: Rg
 
 // trails: each particle's path over the exposure, in its own color, fading
 // in from the oldest frame
-const n = store.count;
 for (let f = 1; f < trail.length; f++) {
+	const [from, to] = [trail[f - 1], trail[f]];
 	const a = 0.35 * (f / trail.length) ** 2;
-	for (let i = 0; i < n; i++) {
-		const ax = trail[f - 1][i] * DPR;
-		const ay = trail[f - 1][n + i] * DPR;
-		const bx = trail[f][i] * DPR;
-		const by = trail[f][n + i] * DPR;
-		segment(ax, ay, bx, by, store.palette[store.color[i]], store.palette[store.color[i]], a);
+	for (let i = 0; i < store.count; i++) {
+		segment(from.x[i] * DPR, from.y[i] * DPR, to.x[i] * DPR, to.y[i] * DPR, store.palette[store.color[i]], a);
 	}
 }
 
 // discs: the bubble shader, sampled 4x4 per pixel
-for (let i = 0; i < n; i++) {
+for (let i = 0; i < store.count; i++) {
 	const cx = store.x[i] * DPR;
 	const cy = store.y[i] * DPR;
 	const r = store.radius[i] * DPR;

@@ -32,8 +32,8 @@ export class ParticleStore {
 	// bumped whenever radius or color may have changed (resize, settings),
 	// so renderers re-upload those only when needed
 	version = 0;
-	// bumped when colors were reassigned (not just resized or re-sized), so
-	// the gpu, which keeps its own dyed colors, takes them
+	// bumped when colors are reassigned, so the gpu, which keeps colors of its
+	// own once the dye can change them, takes these instead
 	colorVersion = 0;
 	wasm: PhysicsExports | null = null;
 	// color index -> rgb / css color; the last slot is the single color

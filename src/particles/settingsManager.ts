@@ -36,7 +36,7 @@ export function carriesSettings(search: string): boolean {
 
 // Every setting a query string sets, parsed and clamped; unknown keys and
 // values that don't parse are dropped.
-export function settingsFromQuery(query: string): Partial<Settings> {
+export function settingsFromQuery(query: string | URLSearchParams): Partial<Settings> {
 	const params = new URLSearchParams(query);
 	const out: Partial<Settings> = {};
 	for (const key of SETTING_KEYS) {
@@ -73,7 +73,7 @@ export class SettingsManager {
 			window.history.replaceState({ path: url }, "", url);
 		}
 
-		Object.assign(this.settings, settingsFromQuery(params.toString()));
+		Object.assign(this.settings, settingsFromQuery(params));
 
 		// always notify, so the initial settings get applied
 		this.onChange(this.settings);

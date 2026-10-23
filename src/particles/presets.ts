@@ -24,6 +24,7 @@ import {
 	OAuthUserAgent,
 	configureOAuth,
 	createAuthorizationUrl,
+	deleteStoredSession,
 	finalizeAuthorization,
 	getSession,
 	listStoredSessions,
@@ -32,7 +33,11 @@ import { buildUniversalLink } from "@aturi.to/waypoints";
 
 export const COLLECTION = "io.zzstoatzz.physics.preset";
 const CREATE = `repo:${COLLECTION}?action=create`;
-const SCOPE = `atproto ${CREATE}`;
+// what a save asks for; public/oauth-client-metadata.json must list each of
+// these tokens (presets.test.ts holds the two together)
+export const SCOPE = `atproto ${CREATE}`;
+export const CLIENT_ID = "https://zzstoatzz.io/oauth-client-metadata.json";
+export const REDIRECT_URI = "https://zzstoatzz.io/";
 // the record's settings string; the lexicon allows this much
 const MAX_SETTINGS = 10000;
 
@@ -49,12 +54,6 @@ export interface Saved {
 	recordLink: string;
 }
 
-export interface Preset {
-	uri: string;
-	settings: string;
-	name: string | null;
-}
-
 // what the authorization round trip carries back (atcute keeps it with the
 // state, so nothing of ours is stored)
 interface PendingSave {
@@ -62,8 +61,13 @@ interface PendingSave {
 	name: string;
 }
 
+const isPending = (s: unknown): s is PendingSave =>
+	!!s && typeof (s as PendingSave).settings === "string" && typeof (s as PendingSave).name === "string";
+
+// handles resolve through slingshot rather than an appview, so signing in
+// doesn't depend on bluesky's
 const actors = new LocalActorResolver({
-	handleResolver: new XrpcHandleResolver({ serviceUrl: "https://public.api.bsky.app" }),
+	handleResolver: new XrpcHandleResolver({ serviceUrl: "https://slingshot.microcosm.blue" }),
 	didDocumentResolver: new CompositeDidDocumentResolver({
 		methods: { plc: new PlcDidDocumentResolver(), web: new WebDidDocumentResolver() },
 	}),
@@ -83,7 +87,7 @@ function configure() {
 					client_id: `http://localhost?redirect_uri=${encodeURIComponent(redirect)}&scope=${encodeURIComponent(SCOPE)}`,
 					redirect_uri: redirect,
 				}
-			: { client_id: "https://zzstoatzz.io/oauth-client-metadata.json", redirect_uri: "https://zzstoatzz.io/" },
+			: { client_id: CLIENT_ID, redirect_uri: REDIRECT_URI },
 		identityResolver: actors,
 	});
 }
@@ -106,8 +110,8 @@ export async function currentAccount(): Promise<Account | null> {
 	configure();
 	for (const did of listStoredSessions()) {
 		try {
-			const session = await getSession(did, { allowStale: true });
-			if (canCreate(session.token.scope)) return { did, handle: await handleOf(did) };
+			const { token } = await getSession(did, { allowStale: true });
+			if (canCreate(token.scope)) return { did, handle: await handleOf(did) };
 		} catch {
 			// expired or revoked: not a usable account
 		}
@@ -115,8 +119,19 @@ export async function currentAccount(): Promise<Account | null> {
 	return null;
 }
 
+// Sign out: revoke at the PDS, and forget the session here even when the
+// PDS can't be reached.
+export async function signOut(did: Did) {
+	configure();
+	try {
+		await new OAuthUserAgent(await getSession(did, { allowStale: true })).signOut();
+	} catch {
+		deleteStoredSession(did);
+	}
+}
+
 // Save settings as a preset. With an identifier, or with no usable session,
-// this redirects to sign in (and resolves never); the save completes in
+// this redirects to sign in and never resolves; the save completes in
 // resume() when the browser comes back.
 export async function save(settings: string, name: string, identifier?: string): Promise<Saved> {
 	configure();
@@ -180,27 +195,26 @@ async function write(did: Did, { settings, name }: PendingSave): Promise<Saved> 
 	};
 }
 
-// Read a preset from its author's PDS. No sign-in: records are public.
-export async function load(uri: string): Promise<Preset> {
-	const parsed = parseCanonicalResourceUri(uri);
-	if (parsed.collection !== COLLECTION) throw new Error(`not a preset: ${uri}`);
-	const { pds } = await actors.resolve(parsed.repo as ActorIdentifier);
+// A preset's settings, read from its author's PDS. No sign-in: records are
+// public.
+export async function load(uri: string): Promise<string> {
+	const { repo, collection, rkey } = parseCanonicalResourceUri(uri);
+	if (collection !== COLLECTION) throw new Error(`not a preset: ${uri}`);
+	const { pds } = await actors.resolve(repo);
 	const rpc = new Client({ handler: simpleFetchHandler({ service: pds }) });
-	const res = await rpc.get("com.atproto.repo.getRecord", {
-		params: { repo: parsed.repo, collection: COLLECTION, rkey: parsed.rkey },
-	});
+	const res = await rpc.get("com.atproto.repo.getRecord", { params: { repo, collection, rkey } });
 	if (!res.ok) throw new Error(`preset not found: ${uri}`);
-	return parsePreset(uri, res.data.value);
+	return presetSettings(uri, res.data.value);
 }
 
-// The fields of a preset record we use, checked: a record is whatever its
-// author wrote.
-export function parsePreset(uri: string, value: unknown): Preset {
+// The settings of a preset record, checked: a record is whatever its author
+// wrote.
+export function presetSettings(uri: string, value: unknown): string {
 	const v = value as Record<string, unknown> | null;
 	if (!v || v.$type !== COLLECTION || typeof v.settings !== "string" || v.settings.length > MAX_SETTINGS) {
 		throw new Error(`not a preset record: ${uri}`);
 	}
-	return { uri, settings: v.settings, name: typeof v.name === "string" ? v.name : null };
+	return v.settings;
 }
 
 // what a person types for an account: a handle (with or without @ or at://,
@@ -213,23 +227,20 @@ export function normalize(input: string): ActorIdentifier {
 	throw new SaveError("handle");
 }
 
-const isPending = (s: unknown): s is PendingSave =>
-	!!s && typeof (s as PendingSave).settings === "string" && typeof (s as PendingSave).name === "string";
-
-// why a save didn't happen, as the panel says it
-export type SaveFailure = "handle" | "resolve" | "cancelled" | "expired" | "scope" | "write";
+// why a save didn't happen
+type SaveFailure = "handle" | "resolve" | "cancelled" | "expired" | "scope" | "write";
 
 export class SaveError extends Error {
 	constructor(
 		readonly reason: SaveFailure,
-		readonly detail?: unknown,
+		cause?: unknown,
 	) {
-		super(reason);
+		super(reason, { cause });
 		this.name = "SaveError";
 	}
 }
 
-export const FAILURE_MESSAGES: Record<SaveFailure, string> = {
+const FAILURE_MESSAGES: Record<SaveFailure, string> = {
 	handle: "that doesn't look like a handle.",
 	resolve: "couldn't find that account.",
 	cancelled: "sign-in was cancelled.",
@@ -237,3 +248,6 @@ export const FAILURE_MESSAGES: Record<SaveFailure, string> = {
 	scope: "saving presets wasn't allowed on that sign-in.",
 	write: "couldn't save to your pds.",
 };
+
+// a failed save, as one sentence for the panel
+export const failureMessage = (e: unknown) => FAILURE_MESSAGES[e instanceof SaveError ? e.reason : "write"];

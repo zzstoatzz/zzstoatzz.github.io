@@ -69,8 +69,9 @@ export class ParticleSystem {
 	private revealed = false;
 	private revealing = false;
 	// and until a linked preset has arrived, if there is one
-	private revealGate: Promise<unknown> = Promise.resolve();
+	private readonly revealGate: Promise<unknown>;
 	// dye mode: the color a press paints, the next of the mix on each press
+	// (starting from the last, so the first press paints the first)
 	paint = PARTICLE_COLORS.length - 1;
 
 	private animationFrameId: number | null = null;
