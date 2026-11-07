@@ -40,7 +40,7 @@ const settings: Settings = {
 
 const out = process.argv[2] ?? "dist/og.png";
 
-// mulberry32: the spawn draws from Math.random, so seeding it seeds the crowd
+// mulberry32: seeds the crowd
 function seeded(s: number) {
 	return () => {
 		s = (s + 0x6d2b79f5) >>> 0;
@@ -50,7 +50,10 @@ function seeded(s: number) {
 		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 	};
 }
-Math.random = seeded(CROWD);
+const random = seeded(CROWD);
+// the frame was picked while WasmPhysics drew its own seed from this stream
+// first; skipping that draw keeps the same crowd
+random();
 
 // the frame and the world around it, in css px
 const fw = WIDTH / DPR;
@@ -67,7 +70,7 @@ physics.seedSpecies(TABLE);
 const store = new ParticleStore();
 store.attach(physics);
 store.resize(count);
-for (let i = 0; i < count; i++) spawnParticle(store, i, Math.random() * w, Math.random() * h, settings);
+for (let i = 0; i < count; i++) spawnParticle(store, i, random() * w, random() * h, settings, random);
 
 const s = settings;
 // no connection lines (none are drawn)

@@ -13,23 +13,31 @@ function setSize(s: ParticleStore, i: number, avg: number) {
 	s.mass[i] = Math.PI * s.radius[i] * s.radius[i];
 }
 
-// A random color from the mix. Always draws, so the Math.random sequence does
-// not depend on the color mode.
-export function randomColor(settings: Settings): number {
-	const c = Math.floor(Math.random() * PARTICLE_COLORS.length);
+// A random color from the mix. Always draws, so the random sequence does not
+// depend on the color mode.
+export function randomColor(settings: Settings, random = Math.random): number {
+	const c = Math.floor(random() * PARTICLE_COLORS.length);
 	return settings.PARTICLE_SINGLE_COLOR ? CUSTOM_COLOR : c;
 }
 
 // New particle at (x, y) with a small random velocity, a random size
 // variation in [-1, 1] and a color (random from the mix, or the single color).
-export function spawnParticle(s: ParticleStore, i: number, x: number, y: number, settings: Settings) {
+// A seeded `random` makes the same crowd every time (scripts/og.ts).
+export function spawnParticle(
+	s: ParticleStore,
+	i: number,
+	x: number,
+	y: number,
+	settings: Settings,
+	random = Math.random,
+) {
 	s.x[i] = x;
 	s.y[i] = y;
-	s.vx[i] = (Math.random() - 0.5) * 2;
-	s.vy[i] = (Math.random() - 0.5) * 2;
-	s.sizeVar[i] = Math.random() * 2 - 1;
+	s.vx[i] = (random() - 0.5) * 2;
+	s.vy[i] = (random() - 0.5) * 2;
+	s.sizeVar[i] = random() * 2 - 1;
 	setSize(s, i, settings.AVERAGE_PARTICLE_SIZE);
-	s.color[i] = randomColor(settings);
+	s.color[i] = randomColor(settings, random);
 }
 
 // Re-derive the size when the size slider changes.
