@@ -47,7 +47,7 @@ export async function loadPresetFromUrl(system: ParticleSystem): Promise<void> {
 	const uri = new URLSearchParams(location.search).get("preset");
 	if (!uri) return;
 	try {
-		const { load } = await loadPresets();
+		const { load } = await import("./presetRecord");
 		applyLook(system, await load(uri));
 	} catch (e) {
 		console.warn("couldn't load preset:", e);

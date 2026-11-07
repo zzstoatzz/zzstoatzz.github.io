@@ -1,24 +1,17 @@
-// Presets: a look saved as an io.zzstoatzz.physics.preset record
-// (lexicons/) in the saver's own repo, and loaded back from any repo by its
-// AT URI. Saving is the only thing on the site that signs in, so that is
+// Saving presets: a look written as an io.zzstoatzz.physics.preset record
+// (presetRecord.ts) to the saver's own repo. Saving is the only thing on the
+// site that signs in, so that is
 // where sign-in happens: the first save sends the browser to the account's
 // authorization server asking to create presets and nothing more, and the
 // save finishes when it comes back. More (deleting, say) would be a wider
 // scope on a new authorization; the client metadata already lists it.
 //
-// Imported only when needed (opening the save form, an OAuth callback, a
-// ?preset= link), so the page itself carries none of this.
+// Imported only when needed (opening the save form, an OAuth callback), so
+// the page itself carries none of this.
 import type {} from "@atcute/atproto";
-import { Client, simpleFetchHandler } from "@atcute/client";
-import {
-	CompositeDidDocumentResolver,
-	LocalActorResolver,
-	PlcDidDocumentResolver,
-	WebDidDocumentResolver,
-	XrpcHandleResolver,
-} from "@atcute/identity-resolver";
+import { Client } from "@atcute/client";
 import type { ActorIdentifier, Did } from "@atcute/lexicons";
-import { isDid, isHandle, parseCanonicalResourceUri } from "@atcute/lexicons/syntax";
+import { isDid, isHandle } from "@atcute/lexicons/syntax";
 import {
 	AuthorizationError,
 	OAuthUserAgent,
@@ -30,16 +23,14 @@ import {
 	listStoredSessions,
 } from "@atcute/oauth-browser-client";
 import { buildUniversalLink } from "@aturi.to/waypoints";
+import { COLLECTION, actors } from "./presetRecord";
 
-export const COLLECTION = "io.zzstoatzz.physics.preset";
 const CREATE = `repo:${COLLECTION}?action=create`;
 // what a save asks for; public/oauth-client-metadata.json must list each of
 // these tokens (presets.test.ts holds the two together)
 export const SCOPE = `atproto ${CREATE}`;
 export const CLIENT_ID = "https://zzstoatzz.io/oauth-client-metadata.json";
 export const REDIRECT_URI = "https://zzstoatzz.io/";
-// the record's settings string; the lexicon allows this much
-const MAX_SETTINGS = 10000;
 
 export interface Account {
 	did: Did;
@@ -63,15 +54,6 @@ interface PendingSave {
 
 const isPending = (s: unknown): s is PendingSave =>
 	!!s && typeof (s as PendingSave).settings === "string" && typeof (s as PendingSave).name === "string";
-
-// handles resolve through slingshot rather than an appview, so signing in
-// doesn't depend on bluesky's
-const actors = new LocalActorResolver({
-	handleResolver: new XrpcHandleResolver({ serviceUrl: "https://slingshot.microcosm.blue" }),
-	didDocumentResolver: new CompositeDidDocumentResolver({
-		methods: { plc: new PlcDidDocumentResolver(), web: new WebDidDocumentResolver() },
-	}),
-});
 
 let configured = false;
 function configure() {
@@ -193,28 +175,6 @@ async function write(did: Did, { settings, name }: PendingSave): Promise<Saved> 
 		settings,
 		recordLink: buildUniversalLink(res.data.uri) ?? res.data.uri,
 	};
-}
-
-// A preset's settings, read from its author's PDS. No sign-in: records are
-// public.
-export async function load(uri: string): Promise<string> {
-	const { repo, collection, rkey } = parseCanonicalResourceUri(uri);
-	if (collection !== COLLECTION) throw new Error(`not a preset: ${uri}`);
-	const { pds } = await actors.resolve(repo);
-	const rpc = new Client({ handler: simpleFetchHandler({ service: pds }) });
-	const res = await rpc.get("com.atproto.repo.getRecord", { params: { repo, collection, rkey } });
-	if (!res.ok) throw new Error(`preset not found: ${uri}`);
-	return presetSettings(uri, res.data.value);
-}
-
-// The settings of a preset record, checked: a record is whatever its author
-// wrote.
-export function presetSettings(uri: string, value: unknown): string {
-	const v = value as Record<string, unknown> | null;
-	if (!v || v.$type !== COLLECTION || typeof v.settings !== "string" || v.settings.length > MAX_SETTINGS) {
-		throw new Error(`not a preset record: ${uri}`);
-	}
-	return v.settings;
 }
 
 // what a person types for an account: a handle (with or without @ or at://,

@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import metadata from '../../public/oauth-client-metadata.json';
-import { CLIENT_ID, COLLECTION, REDIRECT_URI, SCOPE, SaveError, failureMessage, normalize, presetSettings } from './presets';
+import { COLLECTION, presetSettings } from './presetRecord';
+import { CLIENT_ID, REDIRECT_URI, SCOPE, SaveError, failureMessage, normalize } from './presets';
 
 const uri = `at://did:plc:xbtmt2zjwlrfegqvch7fboei/${COLLECTION}/3m2abc`;
 
