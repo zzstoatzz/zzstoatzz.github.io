@@ -5,6 +5,7 @@ import type { ColorMode, SettingKey, Settings } from "./config";
 import { COLOR_MODES, RANGES, SPECIES_DRAG } from "./config";
 import type { ParticleSystem } from "./particleSystem";
 import { mountOnBody } from "./dom";
+import { settingsLook, warm } from "./look";
 import { PresetPanel } from "./presetPanel";
 
 // the few settings whose key names read badly; the rest use the key itself
@@ -356,7 +357,9 @@ export class UIController {
 		});
 
 		onTap("generateShareLink", () => {
-			this.copyToClipboard(this.system.settingsManager.generateShareLink());
+			const link = settingsLook(this.system.settingsManager.toQuery());
+			warm(link);
+			this.copyToClipboard(link);
 			this.showSuccessMessage("link copied to clipboard");
 		});
 

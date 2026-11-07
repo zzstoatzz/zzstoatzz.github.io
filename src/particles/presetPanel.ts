@@ -2,6 +2,7 @@
 // involve a preset: coming back from sign-in to finish a save, and opening a
 // ?preset= link. The atproto code itself (presets.ts) loads only when one of
 // these needs it.
+import { presetLook, warm } from "./look";
 import type { ParticleSystem } from "./particleSystem";
 import type * as PresetsModule from "./presets";
 import type { Account, Saved } from "./presets";
@@ -32,8 +33,8 @@ function stashed(): string | null {
 	}
 }
 
-// the site link that loads a saved preset
-const presetLink = (uri: string) => `${location.origin}/?preset=${encodeURIComponent(uri)}`;
+// the page that loads a saved preset
+const presetPage = (uri: string) => `${location.origin}/?preset=${encodeURIComponent(uri)}`;
 
 // Replace the whole look, and show it in the panel.
 function applyLook(system: ParticleSystem, settings: string) {
@@ -188,8 +189,9 @@ export class PresetPanel {
 	}
 
 	private showSaved(saved: Saved) {
-		const link = presetLink(saved.uri);
-		history.replaceState(null, "", link);
+		history.replaceState(null, "", presetPage(saved.uri));
+		const link = presetLook(saved.uri);
+		warm(link);
 		const view = document.createElement("a");
 		Object.assign(view, { href: saved.recordLink, target: "_blank", rel: "noopener", textContent: "view record" });
 		this.status.replaceChildren(
