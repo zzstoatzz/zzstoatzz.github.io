@@ -160,7 +160,7 @@ export class PresetPanel {
 			const look = stashed();
 			if (look) {
 				applyLook(this.system, look);
-				history.replaceState(null, "", this.system.settingsManager.generateShareLink());
+				history.replaceState(null, "", this.system.settingsManager.pageLink());
 			}
 			console.warn("preset save failed:", e);
 			this.say(failureMessage(e));

@@ -124,8 +124,9 @@ export class SettingsManager {
 		window.history.replaceState({ path: url }, "", url);
 	}
 
-	// Every setting, so the link pins the look even if the defaults change.
-	generateShareLink(): string {
+	// This page's url with every setting, so it pins the look even if the
+	// defaults change.
+	pageLink(): string {
 		return `${window.location.origin}${window.location.pathname}?${this.toQuery()}`;
 	}
 
