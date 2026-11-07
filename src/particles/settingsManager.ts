@@ -53,6 +53,16 @@ function formatSetting(value: Settings[SettingKey]): string {
 	return typeof value === "number" ? String(Number.parseFloat(value.toFixed(4))) : String(value);
 }
 
+// Settings as a query string, in SETTING_KEYS order: one spelling per look.
+export function queryOf(settings: Partial<Settings>): string {
+	const params = new URLSearchParams();
+	for (const key of SETTING_KEYS) {
+		const value = settings[key];
+		if (value !== undefined) params.set(key, formatSetting(value));
+	}
+	return params.toString();
+}
+
 export class SettingsManager {
 	private settings: Settings = { ...DEFAULT_SETTINGS };
 	private updateURLDebounced = debounce(() => this.updateURL(), 300);
@@ -121,9 +131,7 @@ export class SettingsManager {
 
 	// every setting as a query string: what a share link and a saved preset carry
 	toQuery(): string {
-		const params = new URLSearchParams();
-		for (const key of SETTING_KEYS) params.set(key, formatSetting(this.settings[key]));
-		return params.toString();
+		return queryOf(this.settings);
 	}
 
 	// Replace the whole look with a query string's settings, defaults for the

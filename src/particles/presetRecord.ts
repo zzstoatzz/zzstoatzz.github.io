@@ -25,23 +25,33 @@ export const actors = new LocalActorResolver({
 	}),
 });
 
-// A preset's settings, read from its author's PDS.
-export async function load(uri: string): Promise<string> {
+export interface Preset {
+	settings: string;
+	name: string | null;
+	// the author's handle, or null when it doesn't verify
+	handle: string | null;
+}
+
+// A preset, read from its author's PDS.
+export async function read(uri: string): Promise<Preset> {
 	const { repo, collection, rkey } = parseCanonicalResourceUri(uri);
 	if (collection !== COLLECTION) throw new Error(`not a preset: ${uri}`);
-	const { pds } = await actors.resolve(repo);
+	const { pds, handle } = await actors.resolve(repo);
 	const rpc = new Client({ handler: simpleFetchHandler({ service: pds }) });
 	const res = await rpc.get("com.atproto.repo.getRecord", { params: { repo, collection, rkey } });
 	if (!res.ok) throw new Error(`preset not found: ${uri}`);
-	return presetSettings(uri, res.data.value);
+	return { ...presetFields(uri, res.data.value), handle: handle === "handle.invalid" ? null : handle };
 }
 
-// The settings of a preset record, checked: a record is whatever its author
+// A preset's settings, read from its author's PDS.
+export const load = async (uri: string) => (await read(uri)).settings;
+
+// The fields of a preset record, checked: a record is whatever its author
 // wrote.
-export function presetSettings(uri: string, value: unknown): string {
+export function presetFields(uri: string, value: unknown): Omit<Preset, "handle"> {
 	const v = value as Record<string, unknown> | null;
 	if (!v || v.$type !== COLLECTION || typeof v.settings !== "string" || v.settings.length > MAX_SETTINGS) {
 		throw new Error(`not a preset record: ${uri}`);
 	}
-	return v.settings;
+	return { settings: v.settings, name: typeof v.name === "string" ? v.name : null };
 }

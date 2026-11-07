@@ -1,0 +1,13 @@
+{
+	// look.zzstoatzz.io: links to one look on zzstoatzz.io that unfurl as
+	// that look (index.ts). Deploy with `bun run look:deploy`.
+	"name": "look",
+	"main": "index.ts",
+	"compatibility_date": "2026-10-20",
+	"account_id": "3e9ba01cd687b3c4d29033908177072e",
+	"workers_dev": false,
+	"routes": [{ "pattern": "look.zzstoatzz.io", "custom_domain": true }],
+	// rendering a card settles a crowd in wasm: seconds of cpu, once per look
+	"limits": { "cpu_ms": 30000 },
+	"observability": { "enabled": true }
+}

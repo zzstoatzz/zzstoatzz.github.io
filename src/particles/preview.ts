@@ -159,7 +159,7 @@ function segment(px: Float32Array, ax: number, ay: number, bx: number, by: numbe
 // --- a minimal png: 8-bit rgb, unfiltered (the antialiasing noise defeats
 // the row filters), one zlib stream
 
-export async function png(rgb: Float32Array): Promise<Uint8Array> {
+export async function png(rgb: Float32Array): Promise<Uint8Array<ArrayBuffer>> {
 	const stride = WIDTH * 3;
 	// each row: filter type 0, then the row's bytes
 	const raw = new Uint8Array(HEIGHT * (stride + 1));
@@ -192,7 +192,7 @@ function chunk(type: string, data: Uint8Array) {
 	return out;
 }
 
-function concat(parts: Uint8Array[]) {
+function concat(parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
 	const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
 	let o = 0;
 	for (const p of parts) {

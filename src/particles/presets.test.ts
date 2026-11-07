@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import metadata from '../../public/oauth-client-metadata.json';
-import { COLLECTION, presetSettings } from './presetRecord';
+import { COLLECTION, presetFields } from './presetRecord';
 import { CLIENT_ID, REDIRECT_URI, SCOPE, SaveError, failureMessage, normalize } from './presets';
 
 const uri = `at://did:plc:xbtmt2zjwlrfegqvch7fboei/${COLLECTION}/3m2abc`;
@@ -16,16 +16,17 @@ test('something that is not an account is refused before any redirect', () => {
     expect(() => normalize('')).toThrow(SaveError);
 });
 
-test('a preset record gives its settings', () => {
+test('a preset record gives its settings and name', () => {
     const record = { $type: COLLECTION, settings: 'DRAG=0.17', name: 'goo', createdAt: '2026-10-23T00:00:00Z' };
-    expect(presetSettings(uri, record)).toBe('DRAG=0.17');
+    expect(presetFields(uri, record)).toEqual({ settings: 'DRAG=0.17', name: 'goo' });
+    expect(presetFields(uri, { $type: COLLECTION, settings: '' }).name).toBeNull();
 });
 
 test('a record that is not a preset is refused', () => {
-    expect(() => presetSettings(uri, { $type: 'app.bsky.feed.post', settings: 'DRAG=0.17' })).toThrow();
-    expect(() => presetSettings(uri, { $type: COLLECTION, settings: 5 })).toThrow();
-    expect(() => presetSettings(uri, { $type: COLLECTION, settings: 'x'.repeat(10001) })).toThrow();
-    expect(() => presetSettings(uri, null)).toThrow();
+    expect(() => presetFields(uri, { $type: 'app.bsky.feed.post', settings: 'DRAG=0.17' })).toThrow();
+    expect(() => presetFields(uri, { $type: COLLECTION, settings: 5 })).toThrow();
+    expect(() => presetFields(uri, { $type: COLLECTION, settings: 'x'.repeat(10001) })).toThrow();
+    expect(() => presetFields(uri, null)).toThrow();
 });
 
 test('a failed save reads as one sentence, whatever failed', () => {

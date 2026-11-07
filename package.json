@@ -7,8 +7,10 @@
     "build": "astro build && bun scripts/og.ts",
     "preview": "astro preview",
     "check": "astro check",
-    "lint": "astro check && eslint src",
-    "test": "bun test"
+    "lint": "astro check && eslint src worker",
+    "test": "bun test",
+    "look:dev": "bunx wrangler@4.158.0 dev -c worker/wrangler.jsonc --ip 127.0.0.1",
+    "look:deploy": "bunx wrangler@4.158.0 deploy -c worker/wrangler.jsonc"
   },
   "dependencies": {
     "@astrojs/react": "7.0.0",

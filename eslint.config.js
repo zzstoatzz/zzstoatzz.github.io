@@ -4,9 +4,9 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 
 export default tseslint.config(
-    { ignores: ['dist', '.astro'] },
+    { ignores: ['dist', '.astro', '**/.wrangler'] },
     {
-        files: ['src/**/*.{ts,tsx}'],
+        files: ['src/**/*.{ts,tsx}', 'worker/**/*.ts'],
         extends: [js.configs.recommended, ...tseslint.configs.recommended],
         plugins: { 'react-hooks': reactHooks },
         languageOptions: { globals: globals.browser },
