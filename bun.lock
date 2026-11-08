@@ -8,6 +8,7 @@
         "@astrojs/react": "7.0.0",
         "@atcute/atproto": "4.0.4",
         "@atcute/client": "5.1.2",
+        "@atcute/identity": "2.0.2",
         "@atcute/identity-resolver": "2.0.3",
         "@atcute/lexicons": "2.1.1",
         "@atcute/oauth-browser-client": "5.1.0",
