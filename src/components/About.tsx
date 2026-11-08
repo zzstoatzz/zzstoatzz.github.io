@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { MailIcon, GithubIcon, BlueskyIcon, TANGLED_DOLLY } from './icons';
 import { playHref, type TealPlay } from '../utils/teal';
 
-const PDS = 'https://pds.zzstoatzz.io';
 const DID = 'did:plc:xbtmt2zjwlrfegqvch7fboei';
 
 interface Status {
@@ -10,14 +9,9 @@ interface Status {
     emoji?: string;
 }
 
-function listRecords(collection: string, signal: AbortSignal) {
-    return fetch(
-        `${PDS}/xrpc/com.atproto.repo.listRecords?repo=${DID}&collection=${collection}&limit=1`,
-        { signal, cache: 'no-store' }
-    ).then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-    });
+async function listRecords(collection: string, signal: AbortSignal) {
+    const { latestRecords } = await import('../utils/pds');
+    return latestRecords(DID, collection, signal);
 }
 
 // two lines on wide screens, one item per line on phones; never breaks inside an item

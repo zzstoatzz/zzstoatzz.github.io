@@ -3,6 +3,8 @@ import { navigate } from 'astro:transitions/client';
 import { usePathname } from './pathname';
 import { plyrEmbedUrl, type TealPlay } from '../utils/teal';
 
+const DID = 'did:plc:xbtmt2zjwlrfegqvch7fboei';
+
 interface StatusData {
     text?: string;
     emoji?: string;
@@ -57,12 +59,8 @@ export default function NavigationMenu() {
 
         async function fetchStatus() {
             try {
-                const res = await fetch(
-                    'https://pds.zzstoatzz.io/xrpc/com.atproto.repo.listRecords?repo=did:plc:xbtmt2zjwlrfegqvch7fboei&collection=io.zzstoatzz.status.record&limit=1',
-                    { signal: controller.signal, cache: 'no-store' }
-                );
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = await res.json();
+                const { latestRecords } = await import('../utils/pds');
+                const data = await latestRecords(DID, 'io.zzstoatzz.status.record', controller.signal);
                 if (!cancelled && data.records?.[0]?.value) {
                     const record = data.records[0].value;
                     setStatusData({
@@ -95,12 +93,8 @@ export default function NavigationMenu() {
 
         async function fetchLastPlay() {
             try {
-                const res = await fetch(
-                    'https://pds.zzstoatzz.io/xrpc/com.atproto.repo.listRecords?repo=did:plc:xbtmt2zjwlrfegqvch7fboei&collection=fm.teal.feed.play&limit=1',
-                    { signal: controller.signal, cache: 'no-store' }
-                );
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = await res.json();
+                const { latestRecords } = await import('../utils/pds');
+                const data = await latestRecords(DID, 'fm.teal.feed.play', controller.signal);
                 if (!cancelled && data.records?.[0]?.value) {
                     setLastPlay(data.records[0].value as TealPlay);
                 }
